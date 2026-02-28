@@ -758,8 +758,8 @@ fn emit_class_member(
     emitted_lines: &mut std::collections::HashSet<(String, usize)>,
 ) -> bool {
     if let Some(name_cap) = find_capture(m, idx_name) {
-        if let Some(node_cap) = find_capture(m, idx_node) {
-            if is_inside_class_body(&node_cap.node) {
+        if let Some(node_cap) = find_capture(m, idx_node)
+            && is_inside_class_body(&node_cap.node) {
                 let name = node_text(content, &name_cap.node);
                 let line = node_line(&name_cap.node);
                 if emitted_lines.insert((name.to_string(), line)) {
@@ -772,7 +772,6 @@ fn emit_class_member(
                     });
                 }
             }
-        }
         return true;
     }
     false

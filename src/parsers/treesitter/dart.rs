@@ -140,11 +140,10 @@ fn is_in_top_level_wrapper(node: &Node) -> bool {
             return true;
         }
         // Some constructs are wrapped in an unnamed sequence node at top level
-        if let Some(grandparent) = parent.parent() {
-            if grandparent.kind() == "program" {
+        if let Some(grandparent) = parent.parent()
+            && grandparent.kind() == "program" {
                 return true;
             }
-        }
     }
     false
 }
@@ -286,10 +285,10 @@ fn extract_mixin(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) {
     // as mixin_declaration with an ERROR child "class"
     let has_class_keyword = {
         let mut cursor = node.walk();
-        let result = node
+        
+        node
             .children(&mut cursor)
-            .any(|c| c.kind() == "ERROR" && node_text(content, &c).trim() == "class");
-        result
+            .any(|c| c.kind() == "ERROR" && node_text(content, &c).trim() == "class")
     };
 
     if has_class_keyword {
@@ -496,8 +495,8 @@ fn extract_typedef(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) 
         }
     });
 
-    if let Some(name) = name {
-        if !name.is_empty() {
+    if let Some(name) = name
+        && !name.is_empty() {
             symbols.push(ParsedSymbol {
                 name,
                 kind: SymbolKind::TypeAlias,
@@ -506,7 +505,6 @@ fn extract_typedef(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) 
                 parents: vec![],
             });
         }
-    }
 }
 
 /// Extract a function from lambda_expression at top level.
@@ -609,8 +607,8 @@ fn extract_local_var_as_property(node: &Node, content: &str, symbols: &mut Vec<P
     // local_variable_declaration > initialized_variable_definition > identifier
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if child.kind() == "initialized_variable_definition" {
-            if let Some(id) = find_first_identifier(&child, content) {
+        if child.kind() == "initialized_variable_definition"
+            && let Some(id) = find_first_identifier(&child, content) {
                 let line = node_line(&child);
                 symbols.push(ParsedSymbol {
                     name: id,
@@ -620,7 +618,6 @@ fn extract_local_var_as_property(node: &Node, content: &str, symbols: &mut Vec<P
                     parents: vec![],
                 });
             }
-        }
     }
 }
 
@@ -818,8 +815,8 @@ fn extract_const_constructor(node: &Node, content: &str, symbols: &mut Vec<Parse
 fn extract_top_level_vars(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if child.kind() == "initialized_identifier" {
-            if let Some(id) = find_first_identifier(&child, content) {
+        if child.kind() == "initialized_identifier"
+            && let Some(id) = find_first_identifier(&child, content) {
                 let line = node_line(&child);
                 symbols.push(ParsedSymbol {
                     name: id,
@@ -829,7 +826,6 @@ fn extract_top_level_vars(node: &Node, content: &str, symbols: &mut Vec<ParsedSy
                     parents: vec![],
                 });
             }
-        }
     }
 }
 
@@ -837,8 +833,8 @@ fn extract_top_level_vars(node: &Node, content: &str, symbols: &mut Vec<ParsedSy
 fn extract_top_level_consts(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        if child.kind() == "static_final_declaration" {
-            if let Some(id) = find_first_identifier(&child, content) {
+        if child.kind() == "static_final_declaration"
+            && let Some(id) = find_first_identifier(&child, content) {
                 let line = node_line(&child);
                 symbols.push(ParsedSymbol {
                     name: id,
@@ -848,7 +844,6 @@ fn extract_top_level_consts(node: &Node, content: &str, symbols: &mut Vec<Parsed
                     parents: vec![],
                 });
             }
-        }
     }
 }
 
@@ -877,16 +872,15 @@ fn try_recover_from_error(node: &Node, content: &str, symbols: &mut Vec<ParsedSy
         });
 
         // Walk the next sibling (block node) for body declarations
-        if let Some(next) = node.next_sibling() {
-            if next.kind() == "block" {
+        if let Some(next) = node.next_sibling()
+            && next.kind() == "block" {
                 walk_body_declarations(&next, content, symbols);
             }
-        }
     }
 
     // Check for "extension type X(...) implements Y"
-    if text.starts_with("extension type ") || text.starts_with("extension  type ") {
-        if let Some(ext_type_info) = try_parse_extension_type(&text) {
+    if (text.starts_with("extension type ") || text.starts_with("extension  type "))
+        && let Some(ext_type_info) = try_parse_extension_type(&text) {
             let sig_line = line_text(content, line).trim().to_string();
             symbols.push(ParsedSymbol {
                 name: ext_type_info.name,
@@ -896,7 +890,6 @@ fn try_recover_from_error(node: &Node, content: &str, symbols: &mut Vec<ParsedSy
                 parents: ext_type_info.parents,
             });
         }
-    }
 }
 
 struct ClassInfo {

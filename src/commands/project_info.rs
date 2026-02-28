@@ -289,7 +289,7 @@ fn cmd_map_summary(
         })
         .collect();
 
-    groups.sort_by(|a, b| b.file_count.cmp(&a.file_count));
+    groups.sort_by_key(|b| std::cmp::Reverse(b.file_count));
     let total_dirs = groups.len();
     groups.truncate(limit);
 
@@ -325,7 +325,7 @@ fn cmd_map_summary(
         // Build compact kind summary: "12 cls, 3 iface, 2 enum"
         let mut kind_pairs: Vec<(&str, i64)> =
             g.kinds.iter().map(|(k, &v)| (kind_label(k), v)).collect();
-        kind_pairs.sort_by(|a, b| kind_priority(a.0).cmp(&kind_priority(b.0)));
+        kind_pairs.sort_by_key(|a| kind_priority(a.0));
 
         let kinds_str = if kind_pairs.is_empty() {
             String::new()
@@ -751,7 +751,7 @@ pub fn cmd_conventions(root: &Path, format: &str) -> Result<()> {
             }
         }
     }
-    naming.sort_by(|a, b| b.count.cmp(&a.count));
+    naming.sort_by_key(|b| std::cmp::Reverse(b.count));
 
     // B. Frameworks — from refs WHERE context LIKE 'import%'
     let mut fw_map: HashMap<String, HashMap<String, i64>> = HashMap::new();
@@ -794,7 +794,7 @@ pub fn cmd_conventions(root: &Path, format: &str) -> Result<()> {
                 count,
             })
             .collect();
-        sorted.sort_by(|a, b| b.count.cmp(&a.count));
+        sorted.sort_by_key(|b| std::cmp::Reverse(b.count));
         frameworks.insert(cat.clone(), sorted);
     }
 

@@ -514,8 +514,8 @@ pub fn cmd_api(root: &Path, module_path: &str, limit: usize) -> Result<()> {
     }
 
     // Also try looking up module path from DB
-    if !module_dir.exists() {
-        if let Ok(conn) = crate::db::open_db(root) {
+    if !module_dir.exists()
+        && let Ok(conn) = crate::db::open_db(root) {
             let db_path: Option<String> = conn
                 .query_row(
                     "SELECT path FROM modules WHERE name = ?1",
@@ -530,7 +530,6 @@ pub fn cmd_api(root: &Path, module_path: &str, limit: usize) -> Result<()> {
                 }
             }
         }
-    }
 
     if !module_dir.exists() {
         println!("{}", format!("Module not found: {}", module_path).red());
@@ -586,11 +585,10 @@ pub fn detect_vcs(root: &Path) -> &'static str {
 
     for ancestor in root.ancestors() {
         // Stop at home directory to avoid false positives from ~/.arc
-        if let Some(ref h) = home {
-            if ancestor == h.as_path() {
+        if let Some(ref h) = home
+            && ancestor == h.as_path() {
                 break;
             }
-        }
 
         // .arc/HEAD distinguishes real arc repo from ~/.arc (client storage)
         if ancestor.join(".arc").join("HEAD").exists() || ancestor.join(".arcconfig").exists() {
@@ -625,8 +623,7 @@ pub fn detect_git_default_branch(root: &Path) -> &'static str {
         .args(["symbolic-ref", "refs/remotes/origin/HEAD"])
         .current_dir(root)
         .output()
-    {
-        if output.status.success() {
+        && output.status.success() {
             let refname = String::from_utf8_lossy(&output.stdout);
             let refname = refname.trim();
             // Extract branch name after "refs/remotes/origin/"
@@ -640,7 +637,6 @@ pub fn detect_git_default_branch(root: &Path) -> &'static str {
                 };
             }
         }
-    }
 
     // Fallback: check common branch names
     for branch in &["origin/main", "origin/master", "origin/trunk"] {
@@ -648,11 +644,9 @@ pub fn detect_git_default_branch(root: &Path) -> &'static str {
             .args(["rev-parse", "--verify", branch])
             .current_dir(root)
             .output()
-        {
-            if output.status.success() {
+            && output.status.success() {
                 return branch;
             }
-        }
     }
 
     "origin/main"

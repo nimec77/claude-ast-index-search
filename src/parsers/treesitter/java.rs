@@ -157,8 +157,8 @@ impl LanguageParser for JavaParser {
 
             // === Methods (only inside class/interface/enum body) ===
             if let Some(name_cap) = find_capture(m, idx_method_name) {
-                if let Some(node_cap) = find_capture(m, idx_method_node) {
-                    if is_inside_type_body(&node_cap.node) {
+                if let Some(node_cap) = find_capture(m, idx_method_node)
+                    && is_inside_type_body(&node_cap.node) {
                         let name = node_text(content, &name_cap.node);
                         let line = node_line(&name_cap.node);
                         if emitted.insert((name.to_string(), line)) {
@@ -171,14 +171,13 @@ impl LanguageParser for JavaParser {
                             });
                         }
                     }
-                }
                 continue;
             }
 
             // === Constructors ===
             if let Some(name_cap) = find_capture(m, idx_constructor_name) {
-                if let Some(node_cap) = find_capture(m, idx_constructor_node) {
-                    if is_inside_type_body(&node_cap.node) {
+                if let Some(node_cap) = find_capture(m, idx_constructor_node)
+                    && is_inside_type_body(&node_cap.node) {
                         let name = node_text(content, &name_cap.node);
                         let line = node_line(&name_cap.node);
                         if emitted.insert((name.to_string(), line)) {
@@ -191,14 +190,13 @@ impl LanguageParser for JavaParser {
                             });
                         }
                     }
-                }
                 continue;
             }
 
             // === Fields (only inside class/enum body) ===
             if let Some(name_cap) = find_capture(m, idx_field_name) {
-                if let Some(node_cap) = find_capture(m, idx_field_node) {
-                    if is_inside_type_body(&node_cap.node) {
+                if let Some(node_cap) = find_capture(m, idx_field_node)
+                    && is_inside_type_body(&node_cap.node) {
                         let name = node_text(content, &name_cap.node);
                         let line = node_line(&name_cap.node);
                         if emitted.insert((name.to_string(), line)) {
@@ -211,7 +209,6 @@ impl LanguageParser for JavaParser {
                             });
                         }
                     }
-                }
                 continue;
             }
 
@@ -333,11 +330,10 @@ fn extract_type_from_parent_node(node: &tree_sitter::Node, content: &str) -> Opt
             }
             "generic_type" => {
                 // generic_type -> type_identifier type_arguments
-                if let Some(first) = child.named_child(0) {
-                    if first.kind() == "type_identifier" {
+                if let Some(first) = child.named_child(0)
+                    && first.kind() == "type_identifier" {
                         return Some(node_text(content, &first).to_string());
                     }
-                }
             }
             "scoped_type_identifier" => {
                 // Get the last identifier (e.g., com.example.MyClass -> MyClass)
@@ -371,12 +367,11 @@ fn extract_type_list(
                 parents.push((name.to_string(), inherit_kind.to_string()));
             }
             "generic_type" => {
-                if let Some(first) = child.named_child(0) {
-                    if first.kind() == "type_identifier" {
+                if let Some(first) = child.named_child(0)
+                    && first.kind() == "type_identifier" {
                         let name = node_text(content, &first);
                         parents.push((name.to_string(), inherit_kind.to_string()));
                     }
-                }
             }
             "scoped_type_identifier" => {
                 let text = node_text(content, &child);

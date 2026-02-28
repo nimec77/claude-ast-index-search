@@ -325,11 +325,10 @@ pub fn cmd_async_funcs(root: &Path, query: Option<&str>, limit: usize) -> Result
         if let Some(caps) = func_regex.captures(line) {
             let func_name = caps.get(1).unwrap().as_str().to_string();
 
-            if let Some(q) = query {
-                if !func_name.to_lowercase().contains(&q.to_lowercase()) {
+            if let Some(q) = query
+                && !func_name.to_lowercase().contains(&q.to_lowercase()) {
                     return;
                 }
-            }
 
             let rel_path = relative_path(root, path);
             results.push((func_name, rel_path, line_num));
@@ -412,11 +411,10 @@ pub fn cmd_main_actor(root: &Path, query: Option<&str>, limit: usize) -> Result<
             return;
         }
 
-        if let Some(q) = query {
-            if !line.to_lowercase().contains(&q.to_lowercase()) {
+        if let Some(q) = query
+            && !line.to_lowercase().contains(&q.to_lowercase()) {
                 return;
             }
-        }
 
         let rel_path = relative_path(root, path);
         let content: String = line.trim().chars().take(100).collect();

@@ -79,21 +79,18 @@ pub fn cmd_search(
         |path, line_num, line| {
             let rel_path = super::relative_path(root, path);
             // Apply scope filter for grep results
-            if let Some(prefix) = scope.dir_prefix {
-                if !rel_path.starts_with(prefix) {
+            if let Some(prefix) = scope.dir_prefix
+                && !rel_path.starts_with(prefix) {
                     return;
                 }
-            }
-            if let Some(in_file) = scope.in_file {
-                if !rel_path.contains(in_file) {
+            if let Some(in_file) = scope.in_file
+                && !rel_path.contains(in_file) {
                     return;
                 }
-            }
-            if let Some(module) = scope.module {
-                if !rel_path.starts_with(module) {
+            if let Some(module) = scope.module
+                && !rel_path.starts_with(module) {
                     return;
                 }
-            }
             let content: String = line.trim().chars().take(100).collect();
             content_matches.push((rel_path, line_num, content));
         },
@@ -321,16 +318,14 @@ pub fn cmd_implementations(
         let all = db::find_implementations(&conn, parent, limit * 5)?;
         all.into_iter()
             .filter(|s| {
-                if let Some(in_file) = scope.in_file {
-                    if !s.path.contains(in_file) {
+                if let Some(in_file) = scope.in_file
+                    && !s.path.contains(in_file) {
                         return false;
                     }
-                }
-                if let Some(module) = scope.module {
-                    if !s.path.starts_with(module) {
+                if let Some(module) = scope.module
+                    && !s.path.starts_with(module) {
                         return false;
                     }
-                }
                 true
             })
             .take(limit)
@@ -559,16 +554,14 @@ pub fn cmd_usages(
 
         let rel_path = relative_path(root, path);
         // Apply scope filter for grep results
-        if let Some(in_file) = scope.in_file {
-            if !rel_path.contains(in_file) {
+        if let Some(in_file) = scope.in_file
+            && !rel_path.contains(in_file) {
                 return;
             }
-        }
-        if let Some(module) = scope.module {
-            if !rel_path.starts_with(module) {
+        if let Some(module) = scope.module
+            && !rel_path.starts_with(module) {
                 return;
             }
-        }
         let content: String = line.trim().chars().take(80).collect();
         usages.push((rel_path, line_num, content));
     })?;

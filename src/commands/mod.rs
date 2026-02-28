@@ -220,8 +220,8 @@ where
 
             if let Ok(entry) = entry {
                 let path = entry.path();
-                if let Some(ext) = path.extension() {
-                    if extensions.contains(ext.to_str().unwrap_or("")) {
+                if let Some(ext) = path.extension()
+                    && extensions.contains(ext.to_str().unwrap_or("")) {
                         let path_arc: Arc<Path> = Arc::from(path);
                         let found_count = Arc::clone(&found_count);
                         let should_stop = Arc::clone(&should_stop);
@@ -250,7 +250,6 @@ where
                             }),
                         );
                     }
-                }
             }
             ignore::WalkState::Continue
         })

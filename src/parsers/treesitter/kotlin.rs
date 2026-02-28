@@ -202,13 +202,12 @@ fn parse_delegation_specifiers(
         if child.kind() == "delegation_specifiers" {
             let mut ds_walker = child.walk();
             for specifier in child.children(&mut ds_walker) {
-                if specifier.kind() == "delegation_specifier" {
-                    if let Some((name, kind)) =
+                if specifier.kind() == "delegation_specifier"
+                    && let Some((name, kind)) =
                         parse_single_delegation_specifier(&specifier, content)
                     {
                         parents.push((name, kind));
                     }
-                }
             }
         }
     }
@@ -229,11 +228,10 @@ fn parse_delegation_specifiers_for_interface(
         if child.kind() == "delegation_specifiers" {
             let mut ds_walker = child.walk();
             for specifier in child.children(&mut ds_walker) {
-                if specifier.kind() == "delegation_specifier" {
-                    if let Some(name) = extract_type_name_from_specifier(&specifier, content) {
+                if specifier.kind() == "delegation_specifier"
+                    && let Some(name) = extract_type_name_from_specifier(&specifier, content) {
                         parents.push((name, "extends".to_string()));
                     }
-                }
             }
         }
     }
@@ -306,15 +304,13 @@ fn extract_type_name_from_node(node: &tree_sitter::Node, content: &str) -> Optio
             return Some(node_text(content, &child).to_string());
         }
         // Recurse into type and user_type nodes
-        if child.kind() == "user_type"
+        if (child.kind() == "user_type"
             || child.kind() == "type"
             || child.kind() == "nullable_type"
-            || child.kind() == "non_nullable_type"
-        {
-            if let Some(name) = extract_type_name_from_node(&child, content) {
+            || child.kind() == "non_nullable_type")
+            && let Some(name) = extract_type_name_from_node(&child, content) {
                 return Some(name);
             }
-        }
     }
     None
 }

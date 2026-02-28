@@ -312,8 +312,8 @@ impl LanguageParser for RustParser {
                 // Check if this is a derive attribute
                 if attr_text.starts_with("derive(") || attr_text.starts_with("derive (") {
                     // Extract the content inside derive(...)
-                    if let Some(start) = attr_text.find('(') {
-                        if let Some(end) = attr_text.rfind(')') {
+                    if let Some(start) = attr_text.find('(')
+                        && let Some(end) = attr_text.rfind(')') {
                             let derives = &attr_text[start + 1..end];
                             for derive in derives.split(',') {
                                 let derive_name = derive.trim();
@@ -328,7 +328,6 @@ impl LanguageParser for RustParser {
                                 }
                             }
                         }
-                    }
                 } else {
                     // Other attributes: extract the attribute name (first identifier)
                     let attr_name = attr_text.split('(').next().unwrap_or(attr_text).trim();

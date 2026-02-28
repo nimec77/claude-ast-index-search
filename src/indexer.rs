@@ -27,7 +27,7 @@ impl ModuleLookup {
             let (path, id) = row?;
             sorted.push((path, id));
         }
-        sorted.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        sorted.sort_by_key(|b| std::cmp::Reverse(b.0.len()));
         Ok(ModuleLookup { sorted })
     }
 
@@ -114,11 +114,10 @@ pub fn find_sub_projects(root: &Path) -> Vec<(PathBuf, ProjectType)> {
             continue;
         }
         // Skip hidden and excluded dirs
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name.starts_with('.') || EXCLUDED_DIRS.contains(&name) {
+        if let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && (name.starts_with('.') || EXCLUDED_DIRS.contains(&name)) {
                 continue;
             }
-        }
         let pt = detect_project_type(&path);
         let has_marker = pt != ProjectType::Unknown || has_build_marker(&path);
         if has_marker {
@@ -400,14 +399,13 @@ pub fn quick_file_count(root: &Path, no_ignore: bool, limit: usize) -> usize {
 
     let mut count = 0;
     for entry in builder.build().filter_map(|e| e.ok()) {
-        if let Some(ext) = entry.path().extension().and_then(|e| e.to_str()) {
-            if parsers::is_supported_extension(ext) {
+        if let Some(ext) = entry.path().extension().and_then(|e| e.to_str())
+            && parsers::is_supported_extension(ext) {
                 count += 1;
                 if count >= limit {
                     return count;
                 }
             }
-        }
     }
     count
 }
@@ -553,7 +551,7 @@ pub fn index_directory_scoped(
     let mut walk_entries = 0usize;
     for entry in walker.filter_map(|e| e.ok()) {
         walk_entries += 1;
-        if verbose && walk_entries % 10000 == 0 {
+        if verbose && walk_entries.is_multiple_of(10000) {
             eprintln!(
                 "[verbose] walk: {} entries scanned in {:?}...",
                 walk_entries,
@@ -562,11 +560,10 @@ pub fn index_directory_scoped(
         }
         let path = entry.path();
         // Collect module-related files for index_modules
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if is_module_file(name) {
+        if let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && is_module_file(name) {
                 module_files.push(path.to_path_buf());
             }
-        }
         if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
             // Collect parseable source files
             if parsers::is_supported_extension(ext) {
@@ -656,7 +653,7 @@ pub fn index_directory_scoped(
                 .filter_map(|path| {
                     let result = parse_file(&root_clone, path).ok();
                     let c = counter.fetch_add(1, Ordering::Relaxed) + 1;
-                    if progress && c % 2000 == 0 {
+                    if progress && c.is_multiple_of(2000) {
                         eprintln!("Parsed {} / {} files...", c, total);
                     }
                     result
@@ -894,7 +891,7 @@ pub fn update_directory_incremental(
             .filter_map(|path| {
                 let result = parse_file(&root_clone, path).ok();
                 let c = parsed_count_clone.fetch_add(1, Ordering::Relaxed) + 1;
-                if progress && c % 500 == 0 {
+                if progress && c.is_multiple_of(500) {
                     eprintln!("Parsed {} / {} changed files...", c, total_files);
                 }
                 result
@@ -969,8 +966,8 @@ pub fn index_modules_from_files(
             let name_str = name.to_string_lossy();
 
             // Android/Gradle modules
-            if name_str == "build.gradle" || name_str == "build.gradle.kts" {
-                if let Some(parent) = path.parent() {
+            if (name_str == "build.gradle" || name_str == "build.gradle.kts")
+                && let Some(parent) = path.parent() {
                     let module_path = parent
                         .strip_prefix(root)
                         .unwrap_or(parent)
@@ -988,11 +985,10 @@ pub fn index_modules_from_files(
                         count += 1;
                     }
                 }
-            }
 
             // iOS/SPM modules (Package.swift)
-            if name_str == "Package.swift" {
-                if let Some(parent) = path.parent() {
+            if name_str == "Package.swift"
+                && let Some(parent) = path.parent() {
                     let package_path = parent
                         .strip_prefix(root)
                         .unwrap_or(parent)
@@ -1024,11 +1020,10 @@ pub fn index_modules_from_files(
                         }
                     }
                 }
-            }
 
             // Perl modules (.pm files with package declarations)
-            if name_str.ends_with(".pm") {
-                if let Ok(content) = fs::read_to_string(path) {
+            if name_str.ends_with(".pm")
+                && let Ok(content) = fs::read_to_string(path) {
                     static PERL_PACKAGE_RE: LazyLock<Regex> = LazyLock::new(|| {
                         Regex::new(r"^\s*package\s+([A-Za-z_][A-Za-z0-9_:]*)\s*;").unwrap()
                     });
@@ -1052,11 +1047,10 @@ pub fn index_modules_from_files(
                         }
                     }
                 }
-            }
 
             // Maven modules (pom.xml)
-            if name_str == "pom.xml" {
-                if let Some(parent) = path.parent() {
+            if name_str == "pom.xml"
+                && let Some(parent) = path.parent() {
                     let module_path = parent
                         .strip_prefix(root)
                         .unwrap_or(parent)
@@ -1085,7 +1079,6 @@ pub fn index_modules_from_files(
                         }
                     }
                 }
-            }
         }
     }
 
@@ -1532,8 +1525,8 @@ pub fn index_resources(
             let module_id = module_lookup.find(&rel_path);
 
             // Drawable files
-            if rel_path.contains("/drawable") || rel_path.contains("/mipmap") {
-                if let Some(name) = res_path.file_stem().and_then(|n| n.to_str()) {
+            if (rel_path.contains("/drawable") || rel_path.contains("/mipmap"))
+                && let Some(name) = res_path.file_stem().and_then(|n| n.to_str()) {
                     let res_type = if rel_path.contains("/mipmap") {
                         "mipmap"
                     } else {
@@ -1542,19 +1535,17 @@ pub fn index_resources(
                     res_stmt.execute(rusqlite::params![module_id, res_type, name, rel_path, 1])?;
                     resource_count += 1;
                 }
-            }
 
             // Layout files
-            if rel_path.contains("/layout") && rel_path.ends_with(".xml") {
-                if let Some(name) = res_path.file_stem().and_then(|n| n.to_str()) {
+            if rel_path.contains("/layout") && rel_path.ends_with(".xml")
+                && let Some(name) = res_path.file_stem().and_then(|n| n.to_str()) {
                     res_stmt.execute(rusqlite::params![module_id, "layout", name, rel_path, 1])?;
                     resource_count += 1;
                 }
-            }
 
             // Values files (strings, colors, dimens, styles)
-            if rel_path.contains("/values") && rel_path.ends_with(".xml") {
-                if let Ok(content) = fs::read_to_string(res_path) {
+            if rel_path.contains("/values") && rel_path.ends_with(".xml")
+                && let Ok(content) = fs::read_to_string(res_path) {
                     for (line_num, line) in content.lines().enumerate() {
                         let line_num = line_num + 1;
 
@@ -1604,7 +1595,6 @@ pub fn index_resources(
                         }
                     }
                 }
-            }
         }
     }
 
@@ -2004,13 +1994,13 @@ pub fn index_ios_assets(
 
             for entry in inner_walker.flatten() {
                 let path = entry.path();
-                if path.is_dir() {
-                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                        if matches!(
+                if path.is_dir()
+                    && let Some(ext) = path.extension().and_then(|e| e.to_str())
+                        && matches!(
                             ext,
                             "imageset" | "colorset" | "appiconset" | "launchimage" | "dataset"
-                        ) {
-                            if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                        )
+                            && let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
                                 let rel_path = path
                                     .strip_prefix(root)
                                     .unwrap_or(path)
@@ -2026,9 +2016,6 @@ pub fn index_ios_assets(
                                 ])?;
                                 asset_count += 1;
                             }
-                        }
-                    }
-                }
             }
         }
     }
@@ -2126,8 +2113,8 @@ pub fn index_ios_package_managers(conn: &Connection, root: &Path, progress: bool
 
     // CocoaPods: Podfile
     let podfile = root.join("Podfile");
-    if podfile.exists() {
-        if let Ok(content) = fs::read_to_string(&podfile) {
+    if podfile.exists()
+        && let Ok(content) = fs::read_to_string(&podfile) {
             // pod 'PodName', '~> 1.0'
             static POD_RE: LazyLock<Regex> =
                 LazyLock::new(|| Regex::new(r#"pod\s+['"]([^'"]+)['"]"#).unwrap());
@@ -2143,12 +2130,11 @@ pub fn index_ios_package_managers(conn: &Connection, root: &Path, progress: bool
                 count += 1;
             }
         }
-    }
 
     // Podfile.lock for exact versions
     let podfile_lock = root.join("Podfile.lock");
-    if podfile_lock.exists() {
-        if let Ok(content) = fs::read_to_string(&podfile_lock) {
+    if podfile_lock.exists()
+        && let Ok(content) = fs::read_to_string(&podfile_lock) {
             // PODS:
             //   - PodName (1.0.0)
             static POD_LOCK_RE: LazyLock<Regex> =
@@ -2167,12 +2153,11 @@ pub fn index_ios_package_managers(conn: &Connection, root: &Path, progress: bool
                 }
             }
         }
-    }
 
     // Carthage: Cartfile
     let cartfile = root.join("Cartfile");
-    if cartfile.exists() {
-        if let Ok(content) = fs::read_to_string(&cartfile) {
+    if cartfile.exists()
+        && let Ok(content) = fs::read_to_string(&cartfile) {
             // github "owner/repo" ~> 1.0
             static CARTHAGE_RE: LazyLock<Regex> =
                 LazyLock::new(|| Regex::new(r#"github\s+["']([^"']+)["']"#).unwrap());
@@ -2181,7 +2166,7 @@ pub fn index_ios_package_managers(conn: &Connection, root: &Path, progress: bool
 
             for caps in carthage_re.captures_iter(&content) {
                 let repo = caps.get(1).unwrap().as_str();
-                let name = repo.split('/').last().unwrap_or(repo);
+                let name = repo.split('/').next_back().unwrap_or(repo);
                 conn.execute(
                     "INSERT OR IGNORE INTO modules (name, path, kind) VALUES (?1, ?2, ?3)",
                     rusqlite::params![format!("carthage.{}", name), "Carthage/Build", "carthage"],
@@ -2189,12 +2174,11 @@ pub fn index_ios_package_managers(conn: &Connection, root: &Path, progress: bool
                 count += 1;
             }
         }
-    }
 
     // Carthage.resolved for exact versions
     let cartfile_resolved = root.join("Cartfile.resolved");
-    if cartfile_resolved.exists() {
-        if let Ok(content) = fs::read_to_string(&cartfile_resolved) {
+    if cartfile_resolved.exists()
+        && let Ok(content) = fs::read_to_string(&cartfile_resolved) {
             static CARTHAGE_RE: LazyLock<Regex> =
                 LazyLock::new(|| Regex::new(r#"github\s+["']([^"']+)["']"#).unwrap());
 
@@ -2202,7 +2186,7 @@ pub fn index_ios_package_managers(conn: &Connection, root: &Path, progress: bool
 
             for caps in carthage_re.captures_iter(&content) {
                 let repo = caps.get(1).unwrap().as_str();
-                let name = repo.split('/').last().unwrap_or(repo);
+                let name = repo.split('/').next_back().unwrap_or(repo);
                 conn.execute(
                     "INSERT OR IGNORE INTO modules (name, path, kind) VALUES (?1, ?2, ?3)",
                     rusqlite::params![format!("carthage.{}", name), "Carthage/Build", "carthage"],
@@ -2210,7 +2194,6 @@ pub fn index_ios_package_managers(conn: &Connection, root: &Path, progress: bool
                 count += 1;
             }
         }
-    }
 
     if progress {
         eprintln!("Indexed {} CocoaPods/Carthage dependencies", count);
@@ -2303,20 +2286,18 @@ pub fn index_node_modules_dts(conn: &mut Connection, root: &Path, progress: bool
             .follow_links(false)
             .max_depth(Some(8))
             .filter_entry(|entry| {
-                if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                    if let Some(name) = entry.file_name().to_str() {
-                        if name == "node_modules" || name.starts_with('.') {
+                if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
+                    && let Some(name) = entry.file_name().to_str()
+                        && (name == "node_modules" || name.starts_with('.')) {
                             return false;
                         }
-                    }
-                }
                 true
             });
 
         for entry in builder.build().filter_map(|e| e.ok()) {
             let path = entry.path();
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.ends_with(".d.ts") {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && name.ends_with(".d.ts") {
                     // Map resolved path back to node_modules/... relative path
                     let sub_path = path.strip_prefix(pkg_dir).unwrap_or(path).to_string_lossy();
                     let rel_path = if sub_path.is_empty() || sub_path == "." {
@@ -2326,7 +2307,6 @@ pub fn index_node_modules_dts(conn: &mut Connection, root: &Path, progress: bool
                     };
                     dts_files.push((path.to_path_buf(), rel_path));
                 }
-            }
         }
     }
 
@@ -2381,7 +2361,7 @@ pub fn index_node_modules_dts(conn: &mut Connection, root: &Path, progress: bool
                 .filter_map(|(abs_path, rel_path)| {
                     let result = parse_dts_file(abs_path, rel_path).ok();
                     let c = counter.fetch_add(1, Ordering::Relaxed) + 1;
-                    if progress && c % 1000 == 0 {
+                    if progress && c.is_multiple_of(1000) {
                         eprintln!("Parsed {} / {} .d.ts files...", c, total);
                     }
                     result

@@ -48,7 +48,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2024-12-31
+          toolchain: nightly
           targets: ${{ matrix.target }}
 
       - name: Build
