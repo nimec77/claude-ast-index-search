@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.21.1] - 2026-02-28
+
 - **CLAUDE.md** — AI guidance file with architecture overview, command reference, code style rules, and parser development guide; expanded `.gitignore` rules for build/IDE artifacts
 - **Nightly toolchain** — updated Rust toolchain to nightly; refined directory traversal logic, parser implementations, and command functionalities
 - **Code style cleanup** — consolidated nested `if let` / `if` conditions using `&&`; standardized guard-clause formatting across the codebase
