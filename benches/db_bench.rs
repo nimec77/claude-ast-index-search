@@ -85,7 +85,7 @@ fn bench_fts5_search_exact(c: &mut Criterion) {
 
     c.bench_function("fts5_search_exact", |b| {
         b.iter(|| {
-            let _ = db::search_symbols(&conn, criterion::black_box("Symbol5000"), 20);
+            let _ = db::search_symbols(&conn, std::hint::black_box("Symbol5000"), 20);
         });
     });
 }
@@ -96,7 +96,7 @@ fn bench_fts5_search_prefix(c: &mut Criterion) {
 
     c.bench_function("fts5_search_prefix", |b| {
         b.iter(|| {
-            let _ = db::search_symbols(&conn, criterion::black_box("Symbol50*"), 20);
+            let _ = db::search_symbols(&conn, std::hint::black_box("Symbol50*"), 20);
         });
     });
 }
@@ -107,7 +107,7 @@ fn bench_fts5_search_fuzzy(c: &mut Criterion) {
 
     c.bench_function("fts5_search_fuzzy", |b| {
         b.iter(|| {
-            let _ = db::search_symbols_fuzzy(&conn, criterion::black_box("Symbo"), 20);
+            let _ = db::search_symbols_fuzzy(&conn, std::hint::black_box("Symbo"), 20);
         });
     });
 }
@@ -118,7 +118,7 @@ fn bench_find_implementations(c: &mut Criterion) {
 
     c.bench_function("find_implementations_10k", |b| {
         b.iter(|| {
-            let _ = db::find_implementations(&conn, criterion::black_box("BaseClass"), 100);
+            let _ = db::find_implementations(&conn, std::hint::black_box("BaseClass"), 100);
         });
     });
 }
@@ -129,7 +129,7 @@ fn bench_find_references(c: &mut Criterion) {
 
     c.bench_function("find_references_10k", |b| {
         b.iter(|| {
-            let _ = db::find_references(&conn, criterion::black_box("Symbol500"), 100);
+            let _ = db::find_references(&conn, std::hint::black_box("Symbol500"), 100);
         });
     });
 }

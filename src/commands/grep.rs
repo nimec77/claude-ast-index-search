@@ -432,9 +432,10 @@ pub fn cmd_suspend(root: &Path, query: Option<&str>, limit: usize) -> Result<()>
             let func_name = caps.get(1).unwrap().as_str().to_string();
 
             if let Some(q) = query
-                && !func_name.to_lowercase().contains(&q.to_lowercase()) {
-                    return;
-                }
+                && !func_name.to_lowercase().contains(&q.to_lowercase())
+            {
+                return;
+            }
 
             let rel_path = relative_path(root, path);
             suspends.push((func_name, rel_path, line_num));
@@ -497,9 +498,10 @@ pub fn cmd_composables(root: &Path, query: Option<&str>, limit: usize) -> Result
                         let func_name = caps.get(1).unwrap().as_str().to_string();
 
                         if let Some(q) = query
-                            && !func_name.to_lowercase().contains(&q.to_lowercase()) {
-                                break;
-                            }
+                            && !func_name.to_lowercase().contains(&q.to_lowercase())
+                        {
+                            break;
+                        }
 
                         let rel_path = relative_path(root, file_path);
                         composables.push((func_name, rel_path, j + 1));
@@ -548,9 +550,10 @@ pub fn cmd_deprecated(root: &Path, query: Option<&str>, limit: usize) -> Result<
         limit,
         |path, line_num, line| {
             if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase()) {
-                    return;
-                }
+                && !line.to_lowercase().contains(&q.to_lowercase())
+            {
+                return;
+            }
 
             let rel_path = relative_path(root, path);
             let content: String = line.trim().chars().take(80).collect();
@@ -578,9 +581,10 @@ pub fn cmd_suppress(root: &Path, query: Option<&str>, limit: usize) -> Result<()
 
     search_files_limited(root, pattern, &["kt"], limit, |path, line_num, line| {
         if let Some(q) = query
-            && !line.to_lowercase().contains(&q.to_lowercase()) {
-                return;
-            }
+            && !line.to_lowercase().contains(&q.to_lowercase())
+        {
+            return;
+        }
 
         let rel_path = relative_path(root, path);
         let content: String = line.trim().chars().take(80).collect();
@@ -703,9 +707,10 @@ pub fn cmd_deeplinks(root: &Path, query: Option<&str>, limit: usize) -> Result<(
         limit,
         |path, line_num, line| {
             if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase()) {
-                    return;
-                }
+                && !line.to_lowercase().contains(&q.to_lowercase())
+            {
+                return;
+            }
 
             let rel_path = relative_path(root, path);
             let content: String = line.trim().chars().take(100).collect();
@@ -787,9 +792,10 @@ pub fn cmd_flows(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
             let flow_type = caps.get(1).unwrap().as_str().to_string();
 
             if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase()) {
-                    return;
-                }
+                && !line.to_lowercase().contains(&q.to_lowercase())
+            {
+                return;
+            }
 
             let rel_path = relative_path(root, path);
             let content: String = line.trim().chars().take(70).collect();
@@ -851,9 +857,10 @@ pub fn cmd_previews(root: &Path, query: Option<&str>, limit: usize) -> Result<()
                         let func_name = caps.get(1).unwrap().as_str().to_string();
 
                         if let Some(q) = query
-                            && !func_name.to_lowercase().contains(&q.to_lowercase()) {
-                                break;
-                            }
+                            && !func_name.to_lowercase().contains(&q.to_lowercase())
+                        {
+                            break;
+                        }
 
                         let rel_path = relative_path(root, file_path);
                         items.push((func_name, rel_path, j + 1));

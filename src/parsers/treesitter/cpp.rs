@@ -241,16 +241,17 @@ impl LanguageParser for CppParser {
                 // Check for JNI pattern in signature line
                 let sig_line = line_text(content, line).trim().to_string();
                 if is_jni_function(&sig_line)
-                    && let Some(jni_name) = extract_jni_method_name(&sig_line) {
-                        symbols.push(ParsedSymbol {
-                            name: jni_name,
-                            kind: SymbolKind::Function,
-                            line,
-                            signature: sig_line,
-                            parents: vec![],
-                        });
-                        continue;
-                    }
+                    && let Some(jni_name) = extract_jni_method_name(&sig_line)
+                {
+                    symbols.push(ParsedSymbol {
+                        name: jni_name,
+                        kind: SymbolKind::Function,
+                        line,
+                        signature: sig_line,
+                        parents: vec![],
+                    });
+                    continue;
+                }
 
                 if !is_reserved_word(name) {
                     symbols.push(ParsedSymbol {

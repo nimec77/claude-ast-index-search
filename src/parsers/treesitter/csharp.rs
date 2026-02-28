@@ -192,11 +192,12 @@ fn extract_event_field_names(content: &str, node: &tree_sitter::Node) -> Vec<(St
             let mut inner_cursor = child.walk();
             for var_child in child.children(&mut inner_cursor) {
                 if var_child.kind() == "variable_declarator"
-                    && let Some(name_node) = var_child.child_by_field_name("name") {
-                        let name = node_text(content, &name_node).to_string();
-                        let line = node_line(&name_node);
-                        results.push((name, line));
-                    }
+                    && let Some(name_node) = var_child.child_by_field_name("name")
+                {
+                    let name = node_text(content, &name_node).to_string();
+                    let line = node_line(&name_node);
+                    results.push((name, line));
+                }
             }
         }
     }

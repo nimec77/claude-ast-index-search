@@ -221,35 +221,36 @@ where
             if let Ok(entry) = entry {
                 let path = entry.path();
                 if let Some(ext) = path.extension()
-                    && extensions.contains(ext.to_str().unwrap_or("")) {
-                        let path_arc: Arc<Path> = Arc::from(path);
-                        let found_count = Arc::clone(&found_count);
-                        let should_stop = Arc::clone(&should_stop);
+                    && extensions.contains(ext.to_str().unwrap_or(""))
+                {
+                    let path_arc: Arc<Path> = Arc::from(path);
+                    let found_count = Arc::clone(&found_count);
+                    let should_stop = Arc::clone(&should_stop);
 
-                        let _ = searcher.search_path(
-                            &matcher,
-                            path,
-                            UTF8(|line_num, line| {
-                                // Check if we should stop
-                                if should_stop.load(Ordering::Relaxed) {
-                                    return Ok(false); // Stop searching this file
-                                }
+                    let _ = searcher.search_path(
+                        &matcher,
+                        path,
+                        UTF8(|line_num, line| {
+                            // Check if we should stop
+                            if should_stop.load(Ordering::Relaxed) {
+                                return Ok(false); // Stop searching this file
+                            }
 
-                                let count = found_count.fetch_add(1, Ordering::Relaxed);
-                                if count >= limit {
-                                    should_stop.store(true, Ordering::Relaxed);
-                                    return Ok(false);
-                                }
+                            let count = found_count.fetch_add(1, Ordering::Relaxed);
+                            if count >= limit {
+                                should_stop.store(true, Ordering::Relaxed);
+                                return Ok(false);
+                            }
 
-                                let _ = tx.send((
-                                    Arc::clone(&path_arc),
-                                    line_num as usize,
-                                    line.trim_end().to_string(),
-                                ));
-                                Ok(true)
-                            }),
-                        );
-                    }
+                            let _ = tx.send((
+                                Arc::clone(&path_arc),
+                                line_num as usize,
+                                line.trim_end().to_string(),
+                            ));
+                            Ok(true)
+                        }),
+                    );
+                }
             }
             ignore::WalkState::Continue
         })

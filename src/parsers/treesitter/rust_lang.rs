@@ -313,21 +313,22 @@ impl LanguageParser for RustParser {
                 if attr_text.starts_with("derive(") || attr_text.starts_with("derive (") {
                     // Extract the content inside derive(...)
                     if let Some(start) = attr_text.find('(')
-                        && let Some(end) = attr_text.rfind(')') {
-                            let derives = &attr_text[start + 1..end];
-                            for derive in derives.split(',') {
-                                let derive_name = derive.trim();
-                                if !derive_name.is_empty() {
-                                    symbols.push(ParsedSymbol {
-                                        name: format!("#[derive({})]", derive_name),
-                                        kind: SymbolKind::Annotation,
-                                        line,
-                                        signature: sig.clone(),
-                                        parents: vec![],
-                                    });
-                                }
+                        && let Some(end) = attr_text.rfind(')')
+                    {
+                        let derives = &attr_text[start + 1..end];
+                        for derive in derives.split(',') {
+                            let derive_name = derive.trim();
+                            if !derive_name.is_empty() {
+                                symbols.push(ParsedSymbol {
+                                    name: format!("#[derive({})]", derive_name),
+                                    kind: SymbolKind::Annotation,
+                                    line,
+                                    signature: sig.clone(),
+                                    parents: vec![],
+                                });
                             }
                         }
+                    }
                 } else {
                     // Other attributes: extract the attribute name (first identifier)
                     let attr_name = attr_text.split('(').next().unwrap_or(attr_text).trim();

@@ -25,40 +25,42 @@ pub fn get_db_path(project_root: &Path) -> Result<PathBuf> {
 
     // Auto-migrate: if new hash dir doesn't have a DB, look for old one
     if !db_dir.join("index.db").exists()
-        && let Ok(entries) = std::fs::read_dir(&cache_dir) {
-            for entry in entries.flatten() {
-                let old_dir = entry.path();
-                if old_dir.is_dir()
-                    && old_dir.file_name().map(|n| n.to_string_lossy().to_string())
-                        != Some(project_hash.clone())
-                {
-                    let old_db = old_dir.join("index.db");
-                    if old_db.exists() {
-                        // Check if this DB belongs to our project by reading metadata
-                        if let Ok(conn) = rusqlite::Connection::open(&old_db) {
-                            let root_str: Result<String, _> = conn.query_row(
-                                "SELECT value FROM metadata WHERE key = 'project_root'",
-                                [],
-                                |row| row.get(0),
-                            );
-                            if let Ok(root_val) = root_str
-                                && root_val == project_root.to_string_lossy().as_ref() {
-                                    // Found old DB for this project — migrate
-                                    let _ = std::fs::create_dir_all(&db_dir);
-                                    for suffix in ["index.db", "index.db-wal", "index.db-shm"] {
-                                        let src = old_dir.join(suffix);
-                                        if src.exists() {
-                                            let _ = std::fs::rename(&src, db_dir.join(suffix));
-                                        }
-                                    }
-                                    let _ = std::fs::remove_dir(&old_dir);
-                                    break;
+        && let Ok(entries) = std::fs::read_dir(&cache_dir)
+    {
+        for entry in entries.flatten() {
+            let old_dir = entry.path();
+            if old_dir.is_dir()
+                && old_dir.file_name().map(|n| n.to_string_lossy().to_string())
+                    != Some(project_hash.clone())
+            {
+                let old_db = old_dir.join("index.db");
+                if old_db.exists() {
+                    // Check if this DB belongs to our project by reading metadata
+                    if let Ok(conn) = rusqlite::Connection::open(&old_db) {
+                        let root_str: Result<String, _> = conn.query_row(
+                            "SELECT value FROM metadata WHERE key = 'project_root'",
+                            [],
+                            |row| row.get(0),
+                        );
+                        if let Ok(root_val) = root_str
+                            && root_val == project_root.to_string_lossy().as_ref()
+                        {
+                            // Found old DB for this project — migrate
+                            let _ = std::fs::create_dir_all(&db_dir);
+                            for suffix in ["index.db", "index.db-wal", "index.db-shm"] {
+                                let src = old_dir.join(suffix);
+                                if src.exists() {
+                                    let _ = std::fs::rename(&src, db_dir.join(suffix));
                                 }
+                            }
+                            let _ = std::fs::remove_dir(&old_dir);
+                            break;
                         }
                     }
                 }
             }
         }
+    }
 
     std::fs::create_dir_all(&db_dir)?;
     Ok(db_dir.join("index.db"))
@@ -1368,7 +1370,7 @@ mod tests {
         .unwrap();
 
         let results = find_symbols_by_name(&conn, "User", None, 10).unwrap();
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         assert!(results.iter().any(|r| r.name == "User"));
     }
 

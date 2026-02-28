@@ -26,9 +26,10 @@ pub fn cmd_perl_exports(root: &Path, query: Option<&str>, limit: usize) -> Resul
 
     search_files_limited(root, pattern, &["pm"], limit, |path, line_num, line| {
         if let Some(q) = query
-            && !line.to_lowercase().contains(&q.to_lowercase()) {
-                return;
-            }
+            && !line.to_lowercase().contains(&q.to_lowercase())
+        {
+            return;
+        }
 
         let rel_path = relative_path(root, path);
         let content: String = line.trim().chars().take(100).collect();
@@ -62,9 +63,10 @@ pub fn cmd_perl_subs(root: &Path, query: Option<&str>, limit: usize) -> Result<(
         limit,
         |path, line_num, line| {
             if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase()) {
-                    return;
-                }
+                && !line.to_lowercase().contains(&q.to_lowercase())
+            {
+                return;
+            }
 
             let rel_path = relative_path(root, path);
             let content: String = line.trim().chars().take(80).collect();
@@ -103,9 +105,10 @@ pub fn cmd_perl_pod(root: &Path, query: Option<&str>, limit: usize) -> Result<()
         limit,
         |path, line_num, line| {
             if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase()) {
-                    return;
-                }
+                && !line.to_lowercase().contains(&q.to_lowercase())
+            {
+                return;
+            }
 
             let rel_path = relative_path(root, path);
             let content: String = line.trim().chars().take(100).collect();
@@ -145,9 +148,10 @@ pub fn cmd_perl_tests(root: &Path, query: Option<&str>, limit: usize) -> Result<
         limit,
         |path, line_num, line| {
             if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase()) {
-                    return;
-                }
+                && !line.to_lowercase().contains(&q.to_lowercase())
+            {
+                return;
+            }
 
             let rel_path = relative_path(root, path);
             let content: String = line.trim().chars().take(100).collect();
@@ -196,9 +200,10 @@ pub fn cmd_perl_imports(root: &Path, query: Option<&str>, limit: usize) -> Resul
             }
 
             if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase()) {
-                    return;
-                }
+                && !line.to_lowercase().contains(&q.to_lowercase())
+            {
+                return;
+            }
 
             let rel_path = relative_path(root, path);
             let content: String = line.trim().chars().take(100).collect();

@@ -1510,7 +1510,7 @@ fn bench_treesitter_parsing(c: &mut Criterion) {
         ($name:expr, $parser:expr, $snippet:expr) => {
             group.bench_function($name, |b| {
                 b.iter(|| {
-                    let _ = $parser.parse_symbols(criterion::black_box($snippet));
+                    let _ = $parser.parse_symbols(std::hint::black_box($snippet));
                 });
             });
         };
@@ -1539,13 +1539,13 @@ fn bench_large_files(c: &mut Criterion) {
 
     group.bench_function("kotlin_300_lines", |b| {
         b.iter(|| {
-            let _ = KOTLIN_PARSER.parse_symbols(criterion::black_box(LARGE_KOTLIN_SNIPPET));
+            let _ = KOTLIN_PARSER.parse_symbols(std::hint::black_box(LARGE_KOTLIN_SNIPPET));
         });
     });
 
     group.bench_function("java_300_lines", |b| {
         b.iter(|| {
-            let _ = JAVA_PARSER.parse_symbols(criterion::black_box(LARGE_JAVA_SNIPPET));
+            let _ = JAVA_PARSER.parse_symbols(std::hint::black_box(LARGE_JAVA_SNIPPET));
         });
     });
 

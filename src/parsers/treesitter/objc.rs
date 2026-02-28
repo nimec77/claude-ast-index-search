@@ -50,12 +50,13 @@ impl LanguageParser for ObjcParser {
             let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
             while let Some(m) = matches.next() {
                 if let Some(cap) = find_capture(m, idx_class_interface)
-                    && let Some(name) = extract_class_name(content, &cap.node) {
-                        // Check if this is a category
-                        if cap.node.child_by_field_name("category").is_none() {
-                            interface_names.insert(name);
-                        }
+                    && let Some(name) = extract_class_name(content, &cap.node)
+                {
+                    // Check if this is a category
+                    if cap.node.child_by_field_name("category").is_none() {
+                        interface_names.insert(name);
                     }
+                }
             }
         }
 
@@ -204,17 +205,20 @@ impl LanguageParser for ObjcParser {
             if let Some(cap) = find_capture(m, idx_typedef_decl) {
                 let node = &cap.node;
                 if let Some(name) = extract_typedef_name(content, node)
-                    && !name.is_empty() && name != "NS_ENUM" && name != "NS_OPTIONS" {
-                        let line = node.start_position().row + 1;
-                        let sig = line_text(content, line).trim().to_string();
-                        symbols.push(ParsedSymbol {
-                            name,
-                            kind: SymbolKind::TypeAlias,
-                            line,
-                            signature: sig,
-                            parents: vec![],
-                        });
-                    }
+                    && !name.is_empty()
+                    && name != "NS_ENUM"
+                    && name != "NS_OPTIONS"
+                {
+                    let line = node.start_position().row + 1;
+                    let sig = line_text(content, line).trim().to_string();
+                    symbols.push(ParsedSymbol {
+                        name,
+                        kind: SymbolKind::TypeAlias,
+                        line,
+                        signature: sig,
+                        parents: vec![],
+                    });
+                }
                 continue;
             }
         }

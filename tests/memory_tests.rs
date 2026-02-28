@@ -87,10 +87,13 @@ fn measure<F: FnOnce() -> R, R>(f: F) -> (R, MemStats) {
     let peak_delta = peak.saturating_sub(before);
     let retained = after.saturating_sub(before);
 
-    (result, MemStats {
-        peak_delta,
-        retained,
-    })
+    (
+        result,
+        MemStats {
+            peak_delta,
+            retained,
+        },
+    )
 }
 
 #[derive(Debug)]
@@ -877,7 +880,7 @@ fn create_10k_db() -> Connection {
 
 #[test]
 fn db_memory_create_10k() {
-    let (conn, stats) = measure(|| create_10k_db());
+    let (conn, stats) = measure(create_10k_db);
 
     eprintln!(
         "[db_create_10k] peak={}KB, retained={}KB",

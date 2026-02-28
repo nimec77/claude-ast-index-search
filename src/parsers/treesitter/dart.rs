@@ -141,9 +141,10 @@ fn is_in_top_level_wrapper(node: &Node) -> bool {
         }
         // Some constructs are wrapped in an unnamed sequence node at top level
         if let Some(grandparent) = parent.parent()
-            && grandparent.kind() == "program" {
-                return true;
-            }
+            && grandparent.kind() == "program"
+        {
+            return true;
+        }
     }
     false
 }
@@ -285,9 +286,8 @@ fn extract_mixin(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) {
     // as mixin_declaration with an ERROR child "class"
     let has_class_keyword = {
         let mut cursor = node.walk();
-        
-        node
-            .children(&mut cursor)
+
+        node.children(&mut cursor)
             .any(|c| c.kind() == "ERROR" && node_text(content, &c).trim() == "class")
     };
 
@@ -496,15 +496,16 @@ fn extract_typedef(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) 
     });
 
     if let Some(name) = name
-        && !name.is_empty() {
-            symbols.push(ParsedSymbol {
-                name,
-                kind: SymbolKind::TypeAlias,
-                line,
-                signature: sig,
-                parents: vec![],
-            });
-        }
+        && !name.is_empty()
+    {
+        symbols.push(ParsedSymbol {
+            name,
+            kind: SymbolKind::TypeAlias,
+            line,
+            signature: sig,
+            parents: vec![],
+        });
+    }
 }
 
 /// Extract a function from lambda_expression at top level.
@@ -608,16 +609,17 @@ fn extract_local_var_as_property(node: &Node, content: &str, symbols: &mut Vec<P
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "initialized_variable_definition"
-            && let Some(id) = find_first_identifier(&child, content) {
-                let line = node_line(&child);
-                symbols.push(ParsedSymbol {
-                    name: id,
-                    kind: SymbolKind::Property,
-                    line,
-                    signature: line_text(content, line).trim().to_string(),
-                    parents: vec![],
-                });
-            }
+            && let Some(id) = find_first_identifier(&child, content)
+        {
+            let line = node_line(&child);
+            symbols.push(ParsedSymbol {
+                name: id,
+                kind: SymbolKind::Property,
+                line,
+                signature: line_text(content, line).trim().to_string(),
+                parents: vec![],
+            });
+        }
     }
 }
 
@@ -816,16 +818,17 @@ fn extract_top_level_vars(node: &Node, content: &str, symbols: &mut Vec<ParsedSy
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "initialized_identifier"
-            && let Some(id) = find_first_identifier(&child, content) {
-                let line = node_line(&child);
-                symbols.push(ParsedSymbol {
-                    name: id,
-                    kind: SymbolKind::Property,
-                    line,
-                    signature: line_text(content, line).trim().to_string(),
-                    parents: vec![],
-                });
-            }
+            && let Some(id) = find_first_identifier(&child, content)
+        {
+            let line = node_line(&child);
+            symbols.push(ParsedSymbol {
+                name: id,
+                kind: SymbolKind::Property,
+                line,
+                signature: line_text(content, line).trim().to_string(),
+                parents: vec![],
+            });
+        }
     }
 }
 
@@ -834,16 +837,17 @@ fn extract_top_level_consts(node: &Node, content: &str, symbols: &mut Vec<Parsed
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "static_final_declaration"
-            && let Some(id) = find_first_identifier(&child, content) {
-                let line = node_line(&child);
-                symbols.push(ParsedSymbol {
-                    name: id,
-                    kind: SymbolKind::Property,
-                    line,
-                    signature: line_text(content, line).trim().to_string(),
-                    parents: vec![],
-                });
-            }
+            && let Some(id) = find_first_identifier(&child, content)
+        {
+            let line = node_line(&child);
+            symbols.push(ParsedSymbol {
+                name: id,
+                kind: SymbolKind::Property,
+                line,
+                signature: line_text(content, line).trim().to_string(),
+                parents: vec![],
+            });
+        }
     }
 }
 
@@ -873,23 +877,25 @@ fn try_recover_from_error(node: &Node, content: &str, symbols: &mut Vec<ParsedSy
 
         // Walk the next sibling (block node) for body declarations
         if let Some(next) = node.next_sibling()
-            && next.kind() == "block" {
-                walk_body_declarations(&next, content, symbols);
-            }
+            && next.kind() == "block"
+        {
+            walk_body_declarations(&next, content, symbols);
+        }
     }
 
     // Check for "extension type X(...) implements Y"
     if (text.starts_with("extension type ") || text.starts_with("extension  type "))
-        && let Some(ext_type_info) = try_parse_extension_type(&text) {
-            let sig_line = line_text(content, line).trim().to_string();
-            symbols.push(ParsedSymbol {
-                name: ext_type_info.name,
-                kind: SymbolKind::Class,
-                line,
-                signature: sig_line,
-                parents: ext_type_info.parents,
-            });
-        }
+        && let Some(ext_type_info) = try_parse_extension_type(&text)
+    {
+        let sig_line = line_text(content, line).trim().to_string();
+        symbols.push(ParsedSymbol {
+            name: ext_type_info.name,
+            kind: SymbolKind::Class,
+            line,
+            signature: sig_line,
+            parents: ext_type_info.parents,
+        });
+    }
 }
 
 struct ClassInfo {
@@ -1117,10 +1123,10 @@ mod tests {
     fn test_parse_sealed_class() {
         let content = "sealed class Result {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "Result").expect(&format!(
-            "Should find sealed class Result, got: {:?}",
-            symbols
-        ));
+        let cls = symbols
+            .iter()
+            .find(|s| s.name == "Result")
+            .unwrap_or_else(|| panic!("Should find sealed class Result, got: {:?}", symbols));
         assert_eq!(cls.kind, SymbolKind::Class);
     }
 
@@ -1228,10 +1234,10 @@ mod tests {
     fn test_parse_extension_type() {
         let content = "extension type UserId(int id) implements int {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let et = symbols.iter().find(|s| s.name == "UserId").expect(&format!(
-            "Should find extension type UserId, got: {:?}",
-            symbols
-        ));
+        let et = symbols
+            .iter()
+            .find(|s| s.name == "UserId")
+            .unwrap_or_else(|| panic!("Should find extension type UserId, got: {:?}", symbols));
         assert_eq!(et.kind, SymbolKind::Class);
         assert!(
             et.parents.iter().any(|(p, _)| p == "int"),
@@ -1339,7 +1345,7 @@ mod tests {
             .filter(|s| s.name == "count" && s.kind == SymbolKind::Property)
             .collect();
         assert!(
-            getters.len() >= 1,
+            !getters.is_empty(),
             "should find getter 'count', got: {:?}",
             symbols
         );
@@ -1350,7 +1356,7 @@ mod tests {
             })
             .collect();
         assert!(
-            setters.len() >= 1,
+            !setters.is_empty(),
             "should find setter 'count', got: {:?}",
             symbols
         );
@@ -1738,10 +1744,7 @@ enum Status {
         let cls = symbols
             .iter()
             .find(|s| s.name == "BaseModel")
-            .expect(&format!(
-                "Should find base class BaseModel, got: {:?}",
-                symbols
-            ));
+            .unwrap_or_else(|| panic!("Should find base class BaseModel, got: {:?}", symbols));
         assert_eq!(cls.kind, SymbolKind::Class);
     }
 
@@ -1752,10 +1755,7 @@ enum Status {
         let cls = symbols
             .iter()
             .find(|s| s.name == "FinalModel")
-            .expect(&format!(
-                "Should find final class FinalModel, got: {:?}",
-                symbols
-            ));
+            .unwrap_or_else(|| panic!("Should find final class FinalModel, got: {:?}", symbols));
         assert_eq!(cls.kind, SymbolKind::Class);
     }
 
@@ -1766,10 +1766,7 @@ enum Status {
         let cls = symbols
             .iter()
             .find(|s| s.name == "MixinClass")
-            .expect(&format!(
-                "Should find mixin class MixinClass, got: {:?}",
-                symbols
-            ));
+            .unwrap_or_else(|| panic!("Should find mixin class MixinClass, got: {:?}", symbols));
         assert_eq!(cls.kind, SymbolKind::Class);
     }
 

@@ -279,47 +279,63 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
         }
     } else if ext == "dart" {
         // Dart — delegate to tree-sitter parser for correct results
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Dart, &[
-            SymbolKind::Import,
-            SymbolKind::Property,
-        ])?;
+        found = outline_via_treesitter(
+            &content,
+            crate::parsers::FileType::Dart,
+            &[SymbolKind::Import, SymbolKind::Property],
+        )?;
     } else if ext == "java" {
         // Java — delegate to tree-sitter
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Java, &[
-            SymbolKind::Import,
-            SymbolKind::Annotation,
-        ])?;
+        found = outline_via_treesitter(
+            &content,
+            crate::parsers::FileType::Java,
+            &[SymbolKind::Import, SymbolKind::Annotation],
+        )?;
     } else if ext == "ts" || ext == "tsx" || ext == "js" || ext == "jsx" {
         // TypeScript/JavaScript — delegate to tree-sitter
-        found = outline_via_treesitter(&content, crate::parsers::FileType::TypeScript, &[
-            SymbolKind::Import,
-        ])?;
+        found = outline_via_treesitter(
+            &content,
+            crate::parsers::FileType::TypeScript,
+            &[SymbolKind::Import],
+        )?;
     } else if ext == "swift" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Swift, &[
-            SymbolKind::Import,
-        ])?;
+        found = outline_via_treesitter(
+            &content,
+            crate::parsers::FileType::Swift,
+            &[SymbolKind::Import],
+        )?;
     } else if ext == "rb" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Ruby, &[
-            SymbolKind::Import,
-        ])?;
+        found = outline_via_treesitter(
+            &content,
+            crate::parsers::FileType::Ruby,
+            &[SymbolKind::Import],
+        )?;
     } else if ext == "rs" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Rust, &[
-            SymbolKind::Import,
-        ])?;
+        found = outline_via_treesitter(
+            &content,
+            crate::parsers::FileType::Rust,
+            &[SymbolKind::Import],
+        )?;
     } else if ext == "scala" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Scala, &[
-            SymbolKind::Import,
-        ])?;
+        found = outline_via_treesitter(
+            &content,
+            crate::parsers::FileType::Scala,
+            &[SymbolKind::Import],
+        )?;
     } else if ext == "cs" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::CSharp, &[
-            SymbolKind::Import,
-        ])?;
+        found = outline_via_treesitter(
+            &content,
+            crate::parsers::FileType::CSharp,
+            &[SymbolKind::Import],
+        )?;
     } else if ext == "proto" {
         found = outline_via_treesitter(&content, crate::parsers::FileType::Proto, &[])?;
     } else if ext == "m" || ext == "mm" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::ObjC, &[
-            SymbolKind::Import,
-        ])?;
+        found = outline_via_treesitter(
+            &content,
+            crate::parsers::FileType::ObjC,
+            &[SymbolKind::Import],
+        )?;
     } else {
         // Kotlin (default fallback — existing regex logic)
         let class_re = Regex::new(
@@ -515,21 +531,22 @@ pub fn cmd_api(root: &Path, module_path: &str, limit: usize) -> Result<()> {
 
     // Also try looking up module path from DB
     if !module_dir.exists()
-        && let Ok(conn) = crate::db::open_db(root) {
-            let db_path: Option<String> = conn
-                .query_row(
-                    "SELECT path FROM modules WHERE name = ?1",
-                    rusqlite::params![module_path],
-                    |row| row.get(0),
-                )
-                .ok();
-            if let Some(p) = db_path {
-                let alt = root.join(&p);
-                if alt.exists() {
-                    module_dir = alt;
-                }
+        && let Ok(conn) = crate::db::open_db(root)
+    {
+        let db_path: Option<String> = conn
+            .query_row(
+                "SELECT path FROM modules WHERE name = ?1",
+                rusqlite::params![module_path],
+                |row| row.get(0),
+            )
+            .ok();
+        if let Some(p) = db_path {
+            let alt = root.join(&p);
+            if alt.exists() {
+                module_dir = alt;
             }
         }
+    }
 
     if !module_dir.exists() {
         println!("{}", format!("Module not found: {}", module_path).red());
@@ -586,9 +603,10 @@ pub fn detect_vcs(root: &Path) -> &'static str {
     for ancestor in root.ancestors() {
         // Stop at home directory to avoid false positives from ~/.arc
         if let Some(ref h) = home
-            && ancestor == h.as_path() {
-                break;
-            }
+            && ancestor == h.as_path()
+        {
+            break;
+        }
 
         // .arc/HEAD distinguishes real arc repo from ~/.arc (client storage)
         if ancestor.join(".arc").join("HEAD").exists() || ancestor.join(".arcconfig").exists() {
@@ -623,20 +641,21 @@ pub fn detect_git_default_branch(root: &Path) -> &'static str {
         .args(["symbolic-ref", "refs/remotes/origin/HEAD"])
         .current_dir(root)
         .output()
-        && output.status.success() {
-            let refname = String::from_utf8_lossy(&output.stdout);
-            let refname = refname.trim();
-            // Extract branch name after "refs/remotes/origin/"
-            if let Some(branch) = refname.strip_prefix("refs/remotes/origin/") {
-                return match branch {
-                    "main" => "origin/main",
-                    "master" => "origin/master",
-                    "trunk" => "origin/trunk",
-                    "develop" => "origin/develop",
-                    _ => "origin/main",
-                };
-            }
+        && output.status.success()
+    {
+        let refname = String::from_utf8_lossy(&output.stdout);
+        let refname = refname.trim();
+        // Extract branch name after "refs/remotes/origin/"
+        if let Some(branch) = refname.strip_prefix("refs/remotes/origin/") {
+            return match branch {
+                "main" => "origin/main",
+                "master" => "origin/master",
+                "trunk" => "origin/trunk",
+                "develop" => "origin/develop",
+                _ => "origin/main",
+            };
         }
+    }
 
     // Fallback: check common branch names
     for branch in &["origin/main", "origin/master", "origin/trunk"] {
@@ -644,9 +663,10 @@ pub fn detect_git_default_branch(root: &Path) -> &'static str {
             .args(["rev-parse", "--verify", branch])
             .current_dir(root)
             .output()
-            && output.status.success() {
-                return branch;
-            }
+            && output.status.success()
+        {
+            return branch;
+        }
     }
 
     "origin/main"

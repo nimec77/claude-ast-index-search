@@ -110,13 +110,13 @@ fn bench_parse_and_extract_refs(c: &mut Criterion) {
 
     group.bench_function("kotlin", |b| {
         b.iter(|| {
-            let _ = parse_file_symbols(criterion::black_box(KOTLIN_CODE), FileType::Kotlin);
+            let _ = parse_file_symbols(std::hint::black_box(KOTLIN_CODE), FileType::Kotlin);
         });
     });
 
     group.bench_function("java", |b| {
         b.iter(|| {
-            let _ = parse_file_symbols(criterion::black_box(JAVA_CODE), FileType::Java);
+            let _ = parse_file_symbols(std::hint::black_box(JAVA_CODE), FileType::Java);
         });
     });
 
@@ -130,7 +130,7 @@ fn bench_full_pipeline_single_file(c: &mut Criterion) {
             |conn| {
                 // Parse
                 let (symbols, refs) =
-                    parse_file_symbols(criterion::black_box(KOTLIN_CODE), FileType::Kotlin)
+                    parse_file_symbols(std::hint::black_box(KOTLIN_CODE), FileType::Kotlin)
                         .unwrap();
 
                 // Insert file

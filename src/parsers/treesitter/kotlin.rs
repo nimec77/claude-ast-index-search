@@ -205,9 +205,9 @@ fn parse_delegation_specifiers(
                 if specifier.kind() == "delegation_specifier"
                     && let Some((name, kind)) =
                         parse_single_delegation_specifier(&specifier, content)
-                    {
-                        parents.push((name, kind));
-                    }
+                {
+                    parents.push((name, kind));
+                }
             }
         }
     }
@@ -229,9 +229,10 @@ fn parse_delegation_specifiers_for_interface(
             let mut ds_walker = child.walk();
             for specifier in child.children(&mut ds_walker) {
                 if specifier.kind() == "delegation_specifier"
-                    && let Some(name) = extract_type_name_from_specifier(&specifier, content) {
-                        parents.push((name, "extends".to_string()));
-                    }
+                    && let Some(name) = extract_type_name_from_specifier(&specifier, content)
+                {
+                    parents.push((name, "extends".to_string()));
+                }
             }
         }
     }
@@ -308,9 +309,10 @@ fn extract_type_name_from_node(node: &tree_sitter::Node, content: &str) -> Optio
             || child.kind() == "type"
             || child.kind() == "nullable_type"
             || child.kind() == "non_nullable_type")
-            && let Some(name) = extract_type_name_from_node(&child, content) {
-                return Some(name);
-            }
+            && let Some(name) = extract_type_name_from_node(&child, content)
+        {
+            return Some(name);
+        }
     }
     None
 }
