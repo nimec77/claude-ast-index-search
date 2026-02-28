@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::Serialize;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 /// Get the database path for the current project
 pub fn get_db_path(project_root: &Path) -> Result<PathBuf> {
     // Check env: new name first, fallback to old
-    if let Ok(path) = std::env::var("AST_INDEX_DB_PATH")
-        .or_else(|_| std::env::var("KOTLIN_INDEX_DB_PATH"))
+    if let Ok(path) =
+        std::env::var("AST_INDEX_DB_PATH").or_else(|_| std::env::var("KOTLIN_INDEX_DB_PATH"))
     {
         return Ok(PathBuf::from(path));
     }
@@ -28,7 +28,10 @@ pub fn get_db_path(project_root: &Path) -> Result<PathBuf> {
         if let Ok(entries) = std::fs::read_dir(&cache_dir) {
             for entry in entries.flatten() {
                 let old_dir = entry.path();
-                if old_dir.is_dir() && old_dir.file_name().map(|n| n.to_string_lossy().to_string()) != Some(project_hash.clone()) {
+                if old_dir.is_dir()
+                    && old_dir.file_name().map(|n| n.to_string_lossy().to_string())
+                        != Some(project_hash.clone())
+                {
                     let old_db = old_dir.join("index.db");
                     if old_db.exists() {
                         // Check if this DB belongs to our project by reading metadata
@@ -347,11 +350,13 @@ pub fn open_db(project_root: &Path) -> Result<Connection> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
         [],
-    ).ok();
+    )
+    .ok();
     conn.execute(
         "INSERT OR REPLACE INTO metadata (key, value) VALUES ('project_root', ?1)",
         params![project_root.to_string_lossy().as_ref()],
-    ).ok();
+    )
+    .ok();
 
     Ok(conn)
 }
@@ -461,15 +466,15 @@ fn escape_fts5_query(query: &str) -> String {
         return String::new();
     }
     // Check for prefix operator: * must stay OUTSIDE quotes for FTS5
-    let (term, suffix) = if query.ends_with('*') {
-        (&query[..query.len() - 1], "*")
+    let (term, suffix) = if let Some(stripped) = query.strip_suffix('*') {
+        (stripped, "*")
     } else {
         (query, "")
     };
     // Wrap in double quotes to treat as literal phrase
     // Escape any existing double quotes
     let escaped = term.replace('"', "\"\"");
-    format!("\"{}\"{}",  escaped, suffix)
+    format!("\"{}\"{}", escaped, suffix)
 }
 
 /// Search symbols by name (FTS5)
@@ -519,9 +524,7 @@ pub struct SearchResult {
 
 /// Find files by name pattern
 pub fn find_files(conn: &Connection, pattern: &str, limit: usize) -> Result<Vec<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT path FROM files WHERE path LIKE ?1 LIMIT ?2",
-    )?;
+    let mut stmt = conn.prepare("SELECT path FROM files WHERE path LIKE ?1 LIMIT ?2")?;
 
     let pattern = format!("%{}%", pattern);
     let results = stmt
@@ -637,11 +640,7 @@ pub fn find_symbols_by_name(
 }
 
 /// Find class-like symbols (class, interface, object, enum) by name - single query
-pub fn find_class_like(
-    conn: &Connection,
-    name: &str,
-    limit: usize,
-) -> Result<Vec<SearchResult>> {
+pub fn find_class_like(conn: &Connection, name: &str, limit: usize) -> Result<Vec<SearchResult>> {
     let mut stmt = conn.prepare(
         r#"
         SELECT s.name, s.kind, s.line, s.signature, f.path
@@ -694,15 +693,18 @@ pub fn find_implementations(
     )?;
 
     let results = stmt
-        .query_map(params![parent_name, suffix_pattern, contains_pattern, limit as i64], |row| {
-            Ok(SearchResult {
-                name: row.get(0)?,
-                kind: row.get(1)?,
-                line: row.get(2)?,
-                signature: row.get(3)?,
-                path: row.get(4)?,
-            })
-        })?
+        .query_map(
+            params![parent_name, suffix_pattern, contains_pattern, limit as i64],
+            |row| {
+                Ok(SearchResult {
+                    name: row.get(0)?,
+                    kind: row.get(1)?,
+                    line: row.get(2)?,
+                    signature: row.get(3)?,
+                    path: row.get(4)?,
+                })
+            },
+        )?
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(results)
@@ -713,11 +715,23 @@ pub fn get_stats(conn: &Connection) -> Result<DbStats> {
     let file_count: i64 = conn.query_row("SELECT COUNT(*) FROM files", [], |row| row.get(0))?;
     let symbol_count: i64 = conn.query_row("SELECT COUNT(*) FROM symbols", [], |row| row.get(0))?;
     let module_count: i64 = conn.query_row("SELECT COUNT(*) FROM modules", [], |row| row.get(0))?;
-    let refs_count: i64 = conn.query_row("SELECT COUNT(*) FROM refs", [], |row| row.get(0)).unwrap_or(0);
-    let xml_usages_count: i64 = conn.query_row("SELECT COUNT(*) FROM xml_usages", [], |row| row.get(0)).unwrap_or(0);
-    let resources_count: i64 = conn.query_row("SELECT COUNT(*) FROM resources", [], |row| row.get(0)).unwrap_or(0);
-    let storyboard_usages_count: i64 = conn.query_row("SELECT COUNT(*) FROM storyboard_usages", [], |row| row.get(0)).unwrap_or(0);
-    let ios_assets_count: i64 = conn.query_row("SELECT COUNT(*) FROM ios_assets", [], |row| row.get(0)).unwrap_or(0);
+    let refs_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM refs", [], |row| row.get(0))
+        .unwrap_or(0);
+    let xml_usages_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM xml_usages", [], |row| row.get(0))
+        .unwrap_or(0);
+    let resources_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM resources", [], |row| row.get(0))
+        .unwrap_or(0);
+    let storyboard_usages_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM storyboard_usages", [], |row| {
+            row.get(0)
+        })
+        .unwrap_or(0);
+    let ios_assets_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM ios_assets", [], |row| row.get(0))
+        .unwrap_or(0);
 
     Ok(DbStats {
         file_count,
@@ -775,11 +789,7 @@ pub struct RefResult {
 }
 
 /// Find references (usages) of a symbol
-pub fn find_references(
-    conn: &Connection,
-    name: &str,
-    limit: usize,
-) -> Result<Vec<RefResult>> {
+pub fn find_references(conn: &Connection, name: &str, limit: usize) -> Result<Vec<RefResult>> {
     let mut stmt = conn.prepare(
         r#"
         SELECT r.name, r.line, r.context, f.path
@@ -909,15 +919,18 @@ pub fn search_symbols_fuzzy(
     )?;
     let prefix_pattern = format!("{}%", query);
     let results: Vec<SearchResult> = stmt
-        .query_map(params![contains_pattern, query, prefix_pattern, limit as i64], |row| {
-            Ok(SearchResult {
-                name: row.get(0)?,
-                kind: row.get(1)?,
-                line: row.get(2)?,
-                signature: row.get(3)?,
-                path: row.get(4)?,
-            })
-        })?
+        .query_map(
+            params![contains_pattern, query, prefix_pattern, limit as i64],
+            |row| {
+                Ok(SearchResult {
+                    name: row.get(0)?,
+                    kind: row.get(1)?,
+                    line: row.get(2)?,
+                    signature: row.get(3)?,
+                    path: row.get(4)?,
+                })
+            },
+        )?
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(results)
@@ -931,9 +944,13 @@ pub struct SearchScope<'a> {
     pub dir_prefix: Option<&'a str>,
 }
 
-impl<'a> SearchScope<'a> {
+impl SearchScope<'_> {
     pub fn none() -> Self {
-        SearchScope { in_file: None, module: None, dir_prefix: None }
+        SearchScope {
+            in_file: None,
+            module: None,
+            dir_prefix: None,
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -1003,7 +1020,8 @@ pub fn search_symbols_scoped(
     }
     all_params.push(Box::new(limit as i64));
 
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = all_params.iter().map(|p| p.as_ref()).collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        all_params.iter().map(|p| p.as_ref()).collect();
     let results = stmt
         .query_map(param_refs.as_slice(), |row| {
             Ok(SearchResult {
@@ -1055,7 +1073,8 @@ pub fn find_symbols_by_name_scoped(
     }
     all_params.push(Box::new(limit as i64));
 
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = all_params.iter().map(|p| p.as_ref()).collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        all_params.iter().map(|p| p.as_ref()).collect();
     let results = stmt
         .query_map(param_refs.as_slice(), |row| {
             Ok(SearchResult {
@@ -1104,7 +1123,8 @@ pub fn find_class_like_scoped(
     }
     all_params.push(Box::new(limit as i64));
 
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = all_params.iter().map(|p| p.as_ref()).collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        all_params.iter().map(|p| p.as_ref()).collect();
     let results = stmt
         .query_map(param_refs.as_slice(), |row| {
             Ok(SearchResult {
@@ -1154,7 +1174,8 @@ pub fn find_references_scoped(
     }
     all_params.push(Box::new(limit as i64));
 
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = all_params.iter().map(|p| p.as_ref()).collect();
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+        all_params.iter().map(|p| p.as_ref()).collect();
     let results = stmt
         .query_map(param_refs.as_slice(), |row| {
             Ok(RefResult {
@@ -1243,10 +1264,13 @@ mod tests {
     fn test_init_db() {
         let conn = create_test_db();
         // Check tables exist
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='files'",
-            [], |row| row.get(0)
-        ).unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='files'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(count, 1);
     }
 
@@ -1278,8 +1302,24 @@ mod tests {
         let file_id = upsert_file(&conn, "src/main.kt", 1000, 100).unwrap();
         assert!(file_id > 0);
 
-        insert_symbol(&conn, file_id, "MyService", SymbolKind::Class, 10, Some("class MyService")).unwrap();
-        insert_symbol(&conn, file_id, "processData", SymbolKind::Function, 20, Some("fun processData()")).unwrap();
+        insert_symbol(
+            &conn,
+            file_id,
+            "MyService",
+            SymbolKind::Class,
+            10,
+            Some("class MyService"),
+        )
+        .unwrap();
+        insert_symbol(
+            &conn,
+            file_id,
+            "processData",
+            SymbolKind::Function,
+            20,
+            Some("fun processData()"),
+        )
+        .unwrap();
 
         let results = search_symbols(&conn, "MyService", 10).unwrap();
         assert_eq!(results.len(), 1);
@@ -1310,8 +1350,24 @@ mod tests {
     fn test_find_symbols_by_name() {
         let conn = create_test_db();
         let file_id = upsert_file(&conn, "src/model.kt", 1000, 100).unwrap();
-        insert_symbol(&conn, file_id, "User", SymbolKind::Class, 5, Some("data class User")).unwrap();
-        insert_symbol(&conn, file_id, "UserRepository", SymbolKind::Interface, 20, Some("interface UserRepository")).unwrap();
+        insert_symbol(
+            &conn,
+            file_id,
+            "User",
+            SymbolKind::Class,
+            5,
+            Some("data class User"),
+        )
+        .unwrap();
+        insert_symbol(
+            &conn,
+            file_id,
+            "UserRepository",
+            SymbolKind::Interface,
+            20,
+            Some("interface UserRepository"),
+        )
+        .unwrap();
 
         let results = find_symbols_by_name(&conn, "User", None, 10).unwrap();
         assert!(results.len() >= 1);
@@ -1323,14 +1379,25 @@ mod tests {
         let conn = create_test_db();
         let _id1 = upsert_file(&conn, "src/main.kt", 1000, 100).unwrap();
         let id2 = upsert_file(&conn, "src/main.kt", 2000, 200).unwrap();
-        assert!(id2 > 0, "upsert should succeed for same path with different mtime");
+        assert!(
+            id2 > 0,
+            "upsert should succeed for same path with different mtime"
+        );
     }
 
     #[test]
     fn test_clear_db() {
         let conn = create_test_db();
         let file_id = upsert_file(&conn, "src/main.kt", 1000, 100).unwrap();
-        insert_symbol(&conn, file_id, "Test", SymbolKind::Class, 1, Some("class Test")).unwrap();
+        insert_symbol(
+            &conn,
+            file_id,
+            "Test",
+            SymbolKind::Class,
+            1,
+            Some("class Test"),
+        )
+        .unwrap();
 
         clear_db(&conn).unwrap();
 
@@ -1342,8 +1409,24 @@ mod tests {
     fn test_get_stats() {
         let conn = create_test_db();
         let file_id = upsert_file(&conn, "src/main.kt", 1000, 100).unwrap();
-        insert_symbol(&conn, file_id, "Foo", SymbolKind::Class, 1, Some("class Foo")).unwrap();
-        insert_symbol(&conn, file_id, "bar", SymbolKind::Function, 5, Some("fun bar()")).unwrap();
+        insert_symbol(
+            &conn,
+            file_id,
+            "Foo",
+            SymbolKind::Class,
+            1,
+            Some("class Foo"),
+        )
+        .unwrap();
+        insert_symbol(
+            &conn,
+            file_id,
+            "bar",
+            SymbolKind::Function,
+            5,
+            Some("fun bar()"),
+        )
+        .unwrap();
 
         let stats = get_stats(&conn).unwrap();
         assert_eq!(stats.file_count, 1);
@@ -1354,11 +1437,21 @@ mod tests {
     fn test_insert_and_find_inheritance() {
         let conn = create_test_db();
         let file_id = upsert_file(&conn, "src/model.kt", 1000, 100).unwrap();
-        insert_symbol(&conn, file_id, "Child", SymbolKind::Class, 1, Some("class Child : Parent()")).unwrap();
+        insert_symbol(
+            &conn,
+            file_id,
+            "Child",
+            SymbolKind::Class,
+            1,
+            Some("class Child : Parent()"),
+        )
+        .unwrap();
 
-        let child_id: i64 = conn.query_row(
-            "SELECT id FROM symbols WHERE name = 'Child'", [], |row| row.get(0)
-        ).unwrap();
+        let child_id: i64 = conn
+            .query_row("SELECT id FROM symbols WHERE name = 'Child'", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
         insert_inheritance(&conn, child_id, "Parent", "extends").unwrap();
 
         let impls = find_implementations(&conn, "Parent", 10).unwrap();

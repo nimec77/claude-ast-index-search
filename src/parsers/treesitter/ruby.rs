@@ -1,12 +1,12 @@
 //! Tree-sitter based Ruby parser
 
 use anyhow::Result;
-use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 use std::sync::LazyLock;
+use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
+use super::{LanguageParser, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
-use super::{LanguageParser, parse_tree, node_text, node_line, line_text};
 
 static RUBY_LANGUAGE: LazyLock<Language> = LazyLock::new(|| tree_sitter_ruby::LANGUAGE.into());
 
@@ -28,7 +28,10 @@ impl LanguageParser for RubyParser {
 
         let capture_names = query.capture_names();
         let idx = |name: &str| -> Option<u32> {
-            capture_names.iter().position(|n| *n == name).map(|i| i as u32)
+            capture_names
+                .iter()
+                .position(|n| *n == name)
+                .map(|i| i as u32)
         };
 
         let idx_class_name = idx("class_name");
@@ -49,7 +52,12 @@ impl LanguageParser for RubyParser {
                 let name = node_text(content, &name_cap.node);
                 let line = node_line(&name_cap.node);
                 let parents = find_capture(m, idx_class_parent)
-                    .map(|p| vec![(node_text(content, &p.node).to_string(), "extends".to_string())])
+                    .map(|p| {
+                        vec![(
+                            node_text(content, &p.node).to_string(),
+                            "extends".to_string(),
+                        )]
+                    })
                     .unwrap_or_default();
                 symbols.push(ParsedSymbol {
                     name: name.to_string(),
@@ -126,8 +134,8 @@ impl LanguageParser for RubyParser {
             if let Some(method_cap) = find_capture(m, idx_call_method) {
                 let method = node_text(content, &method_cap.node);
                 let line = node_line(&method_cap.node);
-                let first_arg = find_capture(m, idx_call_first_arg)
-                    .map(|c| node_text(content, &c.node));
+                let first_arg =
+                    find_capture(m, idx_call_first_arg).map(|c| node_text(content, &c.node));
 
                 // Skip calls with a receiver (e.g., Foo.bar, obj.method)
                 // We only want bare calls like `require 'json'`, `include Mod`, etc.
@@ -209,11 +217,9 @@ impl LanguageParser for RubyParser {
                     }
 
                     // Rails callbacks
-                    "before_action" | "after_action" | "around_action"
-                    | "before_create" | "after_create"
-                    | "before_save" | "after_save"
-                    | "before_destroy" | "after_destroy"
-                    | "before_validation" | "after_validation"
+                    "before_action" | "after_action" | "around_action" | "before_create"
+                    | "after_create" | "before_save" | "after_save" | "before_destroy"
+                    | "after_destroy" | "before_validation" | "after_validation"
                         if !has_receiver =>
                     {
                         if let Some(arg) = first_arg {
@@ -297,7 +303,9 @@ impl LanguageParser for RubyParser {
 /// Check if a name is an ALL_CAPS constant
 fn is_constant_name(name: &str) -> bool {
     !name.is_empty()
-        && name.chars().all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_')
         && name.chars().any(|c| c.is_uppercase())
 }
 
@@ -323,18 +331,26 @@ mod tests {
     fn test_parse_class() {
         let content = "class User < ApplicationRecord\n  def initialize\n  end\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "User" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s|
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "User" && s.kind == SymbolKind::Class)
+        );
+        assert!(symbols.iter().any(|s| {
             s.name == "User"
-            && s.parents.iter().any(|(p, k)| p == "ApplicationRecord" && k == "extends")
-        ));
+                && s.parents
+                    .iter()
+                    .any(|(p, k)| p == "ApplicationRecord" && k == "extends")
+        }));
     }
 
     #[test]
     fn test_parse_class_no_parent() {
         let content = "class Service\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "Service" && s.kind == SymbolKind::Class);
+        let cls = symbols
+            .iter()
+            .find(|s| s.name == "Service" && s.kind == SymbolKind::Class);
         assert!(cls.is_some());
         assert!(cls.unwrap().parents.is_empty());
     }
@@ -343,103 +359,184 @@ mod tests {
     fn test_parse_namespaced_class() {
         let content = "class Admin::Dashboard\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s|
-            s.name == "Admin::Dashboard" && s.kind == SymbolKind::Class
-        ));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Admin::Dashboard" && s.kind == SymbolKind::Class)
+        );
     }
 
     #[test]
     fn test_parse_module() {
         let content = "module Authenticatable\n  def authenticate\n    true\n  end\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Authenticatable" && s.kind == SymbolKind::Package));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Authenticatable" && s.kind == SymbolKind::Package)
+        );
     }
 
     #[test]
     fn test_parse_namespaced_module() {
         let content = "module Admin::Helpers\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s|
-            s.name == "Admin::Helpers" && s.kind == SymbolKind::Package
-        ));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Admin::Helpers" && s.kind == SymbolKind::Package)
+        );
     }
 
     #[test]
     fn test_parse_nested_module_class() {
         let content = "module Admin\n  class Dashboard\n  end\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Admin" && s.kind == SymbolKind::Package));
-        assert!(symbols.iter().any(|s| s.name == "Dashboard" && s.kind == SymbolKind::Class));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Admin" && s.kind == SymbolKind::Package)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Dashboard" && s.kind == SymbolKind::Class)
+        );
     }
 
     #[test]
     fn test_parse_instance_method() {
         let content = "class Foo\n  def bar\n    42\n  end\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "bar" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "bar" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
     fn test_parse_method_with_question_mark() {
         let content = "class Foo\n  def valid?\n    true\n  end\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "valid?" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "valid?" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
     fn test_parse_method_with_bang() {
         let content = "class Foo\n  def save!\n    persist\n  end\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "save!" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "save!" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
     fn test_parse_class_method() {
         let content = "class Service\n  def self.call(params)\n    new(params).call\n  end\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "self.call" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "self.call" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
     fn test_parse_require() {
         let content = "require 'json'\nrequire 'net/http'\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "json" && s.kind == SymbolKind::Import));
-        assert!(symbols.iter().any(|s| s.name == "net/http" && s.kind == SymbolKind::Import));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "json" && s.kind == SymbolKind::Import)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "net/http" && s.kind == SymbolKind::Import)
+        );
     }
 
     #[test]
     fn test_parse_require_relative() {
         let content = "require_relative './helpers'\nrequire_relative '../models/user'\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "./helpers" && s.kind == SymbolKind::Import));
-        assert!(symbols.iter().any(|s| s.name == "../models/user" && s.kind == SymbolKind::Import));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "./helpers" && s.kind == SymbolKind::Import)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "../models/user" && s.kind == SymbolKind::Import)
+        );
     }
 
     #[test]
     fn test_parse_include_extend_prepend() {
         let content = "class User\n  include Authenticatable\n  extend ClassMethods\n  prepend Trackable\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "include Authenticatable" && s.kind == SymbolKind::Import));
-        assert!(symbols.iter().any(|s| s.name == "extend ClassMethods" && s.kind == SymbolKind::Import));
-        assert!(symbols.iter().any(|s| s.name == "prepend Trackable" && s.kind == SymbolKind::Import));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "include Authenticatable" && s.kind == SymbolKind::Import)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "extend ClassMethods" && s.kind == SymbolKind::Import)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "prepend Trackable" && s.kind == SymbolKind::Import)
+        );
     }
 
     #[test]
     fn test_parse_attr_accessor() {
-        let content = "class User\n  attr_reader :name\n  attr_writer :email\n  attr_accessor :age\nend\n";
+        let content =
+            "class User\n  attr_reader :name\n  attr_writer :email\n  attr_accessor :age\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == ":name" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == ":email" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == ":age" && s.kind == SymbolKind::Property));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == ":name" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == ":email" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == ":age" && s.kind == SymbolKind::Property)
+        );
     }
 
     #[test]
     fn test_parse_constants() {
         let content = "class Config\n  LIMIT = 100\n  DEFAULT_ROLE = \"user\"\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "LIMIT" && s.kind == SymbolKind::Constant));
-        assert!(symbols.iter().any(|s| s.name == "DEFAULT_ROLE" && s.kind == SymbolKind::Constant));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "LIMIT" && s.kind == SymbolKind::Constant)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "DEFAULT_ROLE" && s.kind == SymbolKind::Constant)
+        );
     }
 
     #[test]
@@ -452,34 +549,77 @@ mod tests {
 end
 "#;
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "belongs_to :author" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "has_many :comments" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "has_one :featured_image" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "has_and_belongs_to_many :tags" && s.kind == SymbolKind::Property));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "belongs_to :author" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "has_many :comments" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "has_one :featured_image" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols.iter().any(
+                |s| s.name == "has_and_belongs_to_many :tags" && s.kind == SymbolKind::Property
+            )
+        );
     }
 
     #[test]
     fn test_parse_rails_validates() {
-        let content = "class User < ApplicationRecord\n  validates :name\n  validates :email\nend\n";
+        let content =
+            "class User < ApplicationRecord\n  validates :name\n  validates :email\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "validates :name" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "validates :email" && s.kind == SymbolKind::Annotation));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "validates :name" && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "validates :email" && s.kind == SymbolKind::Annotation)
+        );
     }
 
     #[test]
     fn test_parse_rails_callbacks() {
         let content = "class Post < ApplicationRecord\n  before_save :normalize_title\n  after_create :notify_subscribers\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "before_save :normalize_title" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "after_create :notify_subscribers" && s.kind == SymbolKind::Annotation));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "before_save :normalize_title"
+                    && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "after_create :notify_subscribers"
+                    && s.kind == SymbolKind::Annotation)
+        );
     }
 
     #[test]
     fn test_parse_rails_scope() {
         let content = "class Post < ApplicationRecord\n  scope :published, -> { where(published: true) }\n  scope :recent, -> { order(created_at: :desc) }\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "scope :published" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "scope :recent" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "scope :published" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "scope :recent" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -492,12 +632,12 @@ end
 end
 "#;
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s|
-            s.name.contains("describe") && s.name.contains("User") && s.kind == SymbolKind::Class
-        ));
-        assert!(symbols.iter().any(|s|
-            s.name.contains("context") && s.name.contains("when valid") && s.kind == SymbolKind::Class
-        ));
+        assert!(symbols.iter().any(|s| s.name.contains("describe")
+            && s.name.contains("User")
+            && s.kind == SymbolKind::Class));
+        assert!(symbols.iter().any(|s| s.name.contains("context")
+            && s.name.contains("when valid")
+            && s.kind == SymbolKind::Class));
     }
 
     #[test]
@@ -513,24 +653,24 @@ end
 end
 "#;
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s|
-            s.name.contains("it") && s.name.contains("returns true") && s.kind == SymbolKind::Function
-        ));
-        assert!(symbols.iter().any(|s|
-            s.name.contains("specify") && s.name.contains("returns false") && s.kind == SymbolKind::Function
-        ));
+        assert!(symbols.iter().any(|s| s.name.contains("it")
+            && s.name.contains("returns true")
+            && s.kind == SymbolKind::Function));
+        assert!(symbols.iter().any(|s| s.name.contains("specify")
+            && s.name.contains("returns false")
+            && s.kind == SymbolKind::Function));
     }
 
     #[test]
     fn test_parse_rspec_let() {
         let content = "describe User do\n  let(:user) { build(:user) }\n  let!(:admin) { create(:admin) }\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s|
-            s.name.contains("let") && s.name.contains("user") && s.kind == SymbolKind::Property
-        ));
-        assert!(symbols.iter().any(|s|
-            s.name.contains("let!") && s.name.contains("admin") && s.kind == SymbolKind::Property
-        ));
+        assert!(symbols.iter().any(|s| s.name.contains("let")
+            && s.name.contains("user")
+            && s.kind == SymbolKind::Property));
+        assert!(symbols.iter().any(|s| s.name.contains("let!")
+            && s.name.contains("admin")
+            && s.kind == SymbolKind::Property));
     }
 
     #[test]
@@ -578,31 +718,92 @@ end
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
 
         // Imports
-        assert!(symbols.iter().any(|s| s.name == "json" && s.kind == SymbolKind::Import));
-        assert!(symbols.iter().any(|s| s.name == "include Publishable" && s.kind == SymbolKind::Import));
-        assert!(symbols.iter().any(|s| s.name == "extend Searchable" && s.kind == SymbolKind::Import));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "json" && s.kind == SymbolKind::Import)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "include Publishable" && s.kind == SymbolKind::Import)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "extend Searchable" && s.kind == SymbolKind::Import)
+        );
 
         // Class
-        assert!(symbols.iter().any(|s| s.name == "Post" && s.kind == SymbolKind::Class));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Post" && s.kind == SymbolKind::Class)
+        );
 
         // Properties
-        assert!(symbols.iter().any(|s| s.name == ":draft_content" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "has_many :comments" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "belongs_to :author" && s.kind == SymbolKind::Property));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == ":draft_content" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "has_many :comments" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "belongs_to :author" && s.kind == SymbolKind::Property)
+        );
 
         // Constants
-        assert!(symbols.iter().any(|s| s.name == "CATEGORIES" && s.kind == SymbolKind::Constant));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "CATEGORIES" && s.kind == SymbolKind::Constant)
+        );
 
         // Annotations
-        assert!(symbols.iter().any(|s| s.name == "validates :title" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "before_save :normalize_title" && s.kind == SymbolKind::Annotation));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "validates :title" && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "before_save :normalize_title"
+                    && s.kind == SymbolKind::Annotation)
+        );
 
         // Functions
-        assert!(symbols.iter().any(|s| s.name == "scope :published" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "initialize" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "self.find_by_slug" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "publish!" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "normalize_title" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "scope :published" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "initialize" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "self.find_by_slug" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "publish!" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "normalize_title" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -619,7 +820,11 @@ end
     fn test_parse_method_with_params() {
         let content = "def process(input, output = nil)\n  input\nend\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "process" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "process" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -627,8 +832,20 @@ end
         // Constants should not be confused with class names
         let content = "VERSION = \"1.0\"\nMAX_RETRIES = 3\n";
         let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "VERSION" && s.kind == SymbolKind::Constant));
-        assert!(symbols.iter().any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Constant));
-        assert!(!symbols.iter().any(|s| s.kind == SymbolKind::Class && s.name == "VERSION"));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "VERSION" && s.kind == SymbolKind::Constant)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Constant)
+        );
+        assert!(
+            !symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Class && s.name == "VERSION")
+        );
     }
 }

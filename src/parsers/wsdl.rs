@@ -15,20 +15,23 @@ use anyhow::Result;
 use regex::Regex;
 use std::sync::LazyLock;
 
-use crate::db::SymbolKind;
 use super::ParsedSymbol;
+use crate::db::SymbolKind;
 
 /// Strip Template Toolkit directives from content
 /// Handles both [% ... %] and [%- ... -%] patterns
 fn strip_template_toolkit(content: &str) -> String {
     // First, remove multi-line BLOCK definitions
-    static BLOCK_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)\[%-?\s*BLOCK\s+\w+\s*-?%\].*?\[%-?\s*END\s*-?%\]").unwrap());
+    static BLOCK_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?s)\[%-?\s*BLOCK\s+\w+\s*-?%\].*?\[%-?\s*END\s*-?%\]").unwrap()
+    });
 
     let block_re = &*BLOCK_RE;
     let result = block_re.replace_all(content, "");
 
     // Remove FOREACH loops
-    static FOREACH_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)\[%-?\s*FOREACH\s+[^%]+%\]").unwrap());
+    static FOREACH_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?s)\[%-?\s*FOREACH\s+[^%]+%\]").unwrap());
 
     let foreach_re = &*FOREACH_RE;
     let result = foreach_re.replace_all(&result, "");
@@ -46,7 +49,8 @@ fn strip_template_toolkit(content: &str) -> String {
     let result = inline_re.replace_all(&result, "");
 
     // Remove PROCESS directives
-    static PROCESS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[%-?\s*PROCESS\s+[^%]+%\]").unwrap());
+    static PROCESS_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\[%-?\s*PROCESS\s+[^%]+%\]").unwrap());
 
     let process_re = &*PROCESS_RE;
     let result = process_re.replace_all(&result, "");
@@ -62,68 +66,58 @@ pub fn parse_wsdl_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
     let clean_content = strip_template_toolkit(content);
 
     // Complex type: <xsd:complexType name="TypeName">
-    static COMPLEX_TYPE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r#"<xsd:complexType\s+name\s*=\s*"([^"]+)""#
-
-    ).unwrap());
+    static COMPLEX_TYPE_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"<xsd:complexType\s+name\s*=\s*"([^"]+)""#).unwrap());
 
     let complex_type_re = &*COMPLEX_TYPE_RE;
 
     // Simple type with enumeration: <xsd:simpleType name="EnumName">
-    static SIMPLE_TYPE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r#"<xsd:simpleType\s+name\s*=\s*"([^"]+)""#
-
-    ).unwrap());
+    static SIMPLE_TYPE_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"<xsd:simpleType\s+name\s*=\s*"([^"]+)""#).unwrap());
 
     let simple_type_re = &*SIMPLE_TYPE_RE;
 
     // Element with name (can define inline complex type)
-    static ELEMENT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r#"<xsd:element\s+name\s*=\s*"([^"]+)""#
-
-    ).unwrap());
+    static ELEMENT_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"<xsd:element\s+name\s*=\s*"([^"]+)""#).unwrap());
 
     let element_re = &*ELEMENT_RE;
 
     // Port type: <wsdl:portType name="PortName">
-    static PORT_TYPE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r#"<wsdl:portType\s+name\s*=\s*"([^"]+)""#
-
-    ).unwrap());
+    static PORT_TYPE_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"<wsdl:portType\s+name\s*=\s*"([^"]+)""#).unwrap());
 
     let port_type_re = &*PORT_TYPE_RE;
 
     // Operation: <wsdl:operation name="OperationName">
-    static OPERATION_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r#"<wsdl:operation\s+name\s*=\s*"([^"]+)""#
-
-    ).unwrap());
+    static OPERATION_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"<wsdl:operation\s+name\s*=\s*"([^"]+)""#).unwrap());
 
     let operation_re = &*OPERATION_RE;
 
     // Service: <wsdl:service name="ServiceName">
-    static SERVICE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r#"<wsdl:service\s+name\s*=\s*"([^"]+)""#
-
-    ).unwrap());
+    static SERVICE_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"<wsdl:service\s+name\s*=\s*"([^"]+)""#).unwrap());
 
     let service_re = &*SERVICE_RE;
 
     // Target namespace
-    static NAMESPACE_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(
-        r#"targetNamespace\s*=\s*"([^"]+)""#
-
-    ).unwrap());
+    static NAMESPACE_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"targetNamespace\s*=\s*"([^"]+)""#).unwrap());
 
     let namespace_re = &*NAMESPACE_RE;
 
     // Check if content contains enumeration (to detect enums vs regular simple types)
     let has_enumeration = |start_line: usize, lines: &[&str]| -> bool {
-        for i in start_line..lines.len().min(start_line + 20) {
-            if lines[i].contains("</xsd:simpleType>") {
+        for line in lines
+            .iter()
+            .take(lines.len().min(start_line + 20))
+            .skip(start_line)
+        {
+            if line.contains("</xsd:simpleType>") {
                 break;
             }
-            if lines[i].contains("<xsd:enumeration") {
+            if line.contains("<xsd:enumeration") {
                 return true;
             }
         }
@@ -132,8 +126,11 @@ pub fn parse_wsdl_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
 
     // Check if element has inline complexType (not just a type reference)
     let has_inline_type = |start_line: usize, lines: &[&str]| -> bool {
-        for i in start_line..lines.len().min(start_line + 5) {
-            let line = lines[i];
+        for line in lines
+            .iter()
+            .take(lines.len().min(start_line + 5))
+            .skip(start_line)
+        {
             if line.contains("/>") && !line.contains("<xsd:complexType") {
                 return false; // Self-closing element without inline type
             }
@@ -306,8 +303,16 @@ mod tests {
 </xsd:schema>
 "#;
         let symbols = parse_wsdl_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Class && s.name == "ArrayOfString"));
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Package && s.name == "v1"));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Class && s.name == "ArrayOfString")
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Package && s.name == "v1")
+        );
     }
 
     #[test]
@@ -321,7 +326,11 @@ mod tests {
 </xsd:simpleType>
 "#;
         let symbols = parse_wsdl_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Enum && s.name == "StatusEnum"));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Enum && s.name == "StatusEnum")
+        );
     }
 
     #[test]
@@ -343,10 +352,26 @@ mod tests {
 </wsdl:definitions>
 "#;
         let symbols = parse_wsdl_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Interface && s.name == "ClientsPort"));
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Function && s.name == "Get"));
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Function && s.name == "Update"));
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Class && s.name == "ClientsService"));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Interface && s.name == "ClientsPort")
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Function && s.name == "Get")
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Function && s.name == "Update")
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Class && s.name == "ClientsService")
+        );
     }
 
     #[test]
@@ -363,7 +388,11 @@ mod tests {
 "#;
         let symbols = parse_wsdl_symbols(content).unwrap();
         // GetRequest has inline complexType, should be indexed
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Class && s.name == "GetRequest"));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Class && s.name == "GetRequest")
+        );
         // SimpleRef is just a type reference, should not be indexed as class
         assert!(!symbols.iter().any(|s| s.name == "SimpleRef"));
     }
@@ -380,7 +409,11 @@ mod tests {
 </xsd:complexType>
 "#;
         let symbols = parse_wsdl_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Class && s.name == "Address"));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Class && s.name == "Address")
+        );
     }
 
     #[test]
@@ -393,9 +426,21 @@ mod tests {
 </wsdl:portType>
 "#;
         let symbols = parse_wsdl_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Function && s.name == "CreateOrder"));
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Function && s.name == "GetOrder"));
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Function && s.name == "DeleteOrder"));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Function && s.name == "CreateOrder")
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Function && s.name == "GetOrder")
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Function && s.name == "DeleteOrder")
+        );
     }
 
     #[test]
@@ -406,6 +451,10 @@ mod tests {
 </wsdl:service>
 "#;
         let symbols = parse_wsdl_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.kind == SymbolKind::Class && s.name == "PaymentService"));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.kind == SymbolKind::Class && s.name == "PaymentService")
+        );
     }
 }

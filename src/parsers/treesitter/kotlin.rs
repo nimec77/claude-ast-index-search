@@ -1,12 +1,12 @@
 //! Tree-sitter based Kotlin/Java parser
 
 use anyhow::Result;
-use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 use std::sync::LazyLock;
+use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
+use super::{LanguageParser, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
-use super::{LanguageParser, parse_tree, node_text, node_line, line_text};
 
 static KT_LANGUAGE: LazyLock<Language> = LazyLock::new(|| tree_sitter_kotlin_ng::LANGUAGE.into());
 
@@ -28,7 +28,10 @@ impl LanguageParser for KotlinParser {
 
         let capture_names = query.capture_names();
         let idx = |name: &str| -> Option<u32> {
-            capture_names.iter().position(|n| *n == name).map(|i| i as u32)
+            capture_names
+                .iter()
+                .position(|n| *n == name)
+                .map(|i| i as u32)
         };
 
         let idx_class_name = idx("class_name");
@@ -200,7 +203,9 @@ fn parse_delegation_specifiers(
             let mut ds_walker = child.walk();
             for specifier in child.children(&mut ds_walker) {
                 if specifier.kind() == "delegation_specifier" {
-                    if let Some((name, kind)) = parse_single_delegation_specifier(&specifier, content) {
+                    if let Some((name, kind)) =
+                        parse_single_delegation_specifier(&specifier, content)
+                    {
                         parents.push((name, kind));
                     }
                 }
@@ -301,8 +306,10 @@ fn extract_type_name_from_node(node: &tree_sitter::Node, content: &str) -> Optio
             return Some(node_text(content, &child).to_string());
         }
         // Recurse into type and user_type nodes
-        if child.kind() == "user_type" || child.kind() == "type"
-            || child.kind() == "nullable_type" || child.kind() == "non_nullable_type"
+        if child.kind() == "user_type"
+            || child.kind() == "type"
+            || child.kind() == "nullable_type"
+            || child.kind() == "non_nullable_type"
         {
             if let Some(name) = extract_type_name_from_node(&child, content) {
                 return Some(name);
@@ -341,73 +348,124 @@ mod tests {
     fn test_parse_class() {
         let content = "class MyService {\n}\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "MyService" && s.kind == SymbolKind::Class));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "MyService" && s.kind == SymbolKind::Class)
+        );
     }
 
     #[test]
     fn test_parse_data_class() {
         let content = "data class User(val name: String, val age: Int)\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "User" && s.kind == SymbolKind::Class));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "User" && s.kind == SymbolKind::Class)
+        );
     }
 
     #[test]
     fn test_parse_object() {
         let content = "object Singleton {\n}\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Singleton" && s.kind == SymbolKind::Object));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Singleton" && s.kind == SymbolKind::Object)
+        );
     }
 
     #[test]
     fn test_parse_interface() {
         let content = "interface Repository {\n    fun getAll(): List<Item>\n}\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Repository" && s.kind == SymbolKind::Interface));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Repository" && s.kind == SymbolKind::Interface)
+        );
     }
 
     #[test]
     fn test_parse_sealed_interface() {
         let content = "sealed interface Result {\n}\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Result" && s.kind == SymbolKind::Interface));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Result" && s.kind == SymbolKind::Interface)
+        );
     }
 
     #[test]
     fn test_parse_function() {
         let content = "fun processPayment(amount: Double): Boolean {\n}\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "processPayment" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "processPayment" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
     fn test_parse_suspend_function() {
         let content = "    suspend fun fetchData(): Result<Data> {\n    }\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "fetchData" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "fetchData" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
     fn test_parse_property() {
         let content = "    val name: String = \"test\"\n    var count: Int = 0\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "name" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "count" && s.kind == SymbolKind::Property));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "name" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "count" && s.kind == SymbolKind::Property)
+        );
     }
 
     #[test]
     fn test_parse_typealias() {
         let content = "typealias StringMap = Map<String, String>\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "StringMap" && s.kind == SymbolKind::TypeAlias));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "StringMap" && s.kind == SymbolKind::TypeAlias)
+        );
     }
 
     #[test]
     fn test_parse_class_with_inheritance() {
         let content = "class MyFragment(arg: String) : Fragment(), Serializable {\n}\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "MyFragment" && s.kind == SymbolKind::Class).unwrap();
-        assert!(cls.parents.iter().any(|(p, k)| p == "Fragment" && k == "extends"));
-        assert!(cls.parents.iter().any(|(p, k)| p == "Serializable" && k == "implements"));
+        let cls = symbols
+            .iter()
+            .find(|s| s.name == "MyFragment" && s.kind == SymbolKind::Class)
+            .unwrap();
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "Fragment" && k == "extends")
+        );
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "Serializable" && k == "implements")
+        );
     }
 
     #[test]
@@ -420,7 +478,8 @@ mod tests {
 
     #[test]
     fn test_comments_ignored() {
-        let content = "// class FakeClass {}\nclass RealClass {}\n/* fun fake() {} */\nfun real() {}\n";
+        let content =
+            "// class FakeClass {}\nclass RealClass {}\n/* fun fake() {} */\nfun real() {}\n";
         let symbols = KOTLIN_PARSER.parse_symbols(content).unwrap();
         assert!(symbols.iter().any(|s| s.name == "RealClass"));
         assert!(!symbols.iter().any(|s| s.name == "FakeClass"));

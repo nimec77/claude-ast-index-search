@@ -1,14 +1,14 @@
 //! Tree-sitter based Dart parser
 
 use anyhow::Result;
-use tree_sitter::{Language, Node};
 use std::sync::LazyLock;
+use tree_sitter::{Language, Node};
 
+use super::{LanguageParser, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
-use super::{LanguageParser, parse_tree, node_text, node_line, line_text};
 
-static DART_LANGUAGE: LazyLock<Language> = LazyLock::new(|| tree_sitter_dart::language());
+static DART_LANGUAGE: LazyLock<Language> = LazyLock::new(tree_sitter_dart::language);
 
 pub static DART_PARSER: DartParser = DartParser;
 
@@ -161,7 +161,10 @@ fn extract_import(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) {
         // Strip quotes from the URI
         let path = uri_text.trim_matches('\'').trim_matches('"');
         // Extract short name: last segment without .dart
-        let short_name = path.rsplit('/').next().unwrap_or(path)
+        let short_name = path
+            .rsplit('/')
+            .next()
+            .unwrap_or(path)
             .trim_end_matches(".dart");
 
         // Check if it's an export
@@ -191,11 +194,12 @@ fn extract_class(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) {
     let full_text = node_text(content, node);
     let decl_prefix = full_text.split('{').next().unwrap_or("");
 
-    let kind = if decl_prefix.contains("interface class") || decl_prefix.contains("interface  class") {
-        SymbolKind::Interface
-    } else {
-        SymbolKind::Class
-    };
+    let kind =
+        if decl_prefix.contains("interface class") || decl_prefix.contains("interface  class") {
+            SymbolKind::Interface
+        } else {
+            SymbolKind::Class
+        };
 
     // Extract parents
     let mut parents = Vec::new();
@@ -254,7 +258,12 @@ fn extract_interfaces_parents(node: &Node, content: &str, parents: &mut Vec<(Str
 }
 
 /// Recursively extract type_identifier names from a node, for a given relationship kind
-fn extract_type_names_from_node(node: &Node, content: &str, parents: &mut Vec<(String, String)>, kind: &str) {
+fn extract_type_names_from_node(
+    node: &Node,
+    content: &str,
+    parents: &mut Vec<(String, String)>,
+    kind: &str,
+) {
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "type_identifier" {
@@ -277,14 +286,18 @@ fn extract_mixin(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) {
     // as mixin_declaration with an ERROR child "class"
     let has_class_keyword = {
         let mut cursor = node.walk();
-        let result = node.children(&mut cursor).any(|c| c.kind() == "ERROR" && node_text(content, &c).trim() == "class");
+        let result = node
+            .children(&mut cursor)
+            .any(|c| c.kind() == "ERROR" && node_text(content, &c).trim() == "class");
         result
     };
 
     if has_class_keyword {
         // "mixin class" → treat as Class
         let name = find_mixin_name(node, content);
-        if name.is_empty() { return; }
+        if name.is_empty() {
+            return;
+        }
 
         symbols.push(ParsedSymbol {
             name,
@@ -298,7 +311,9 @@ fn extract_mixin(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) {
 
     // Regular mixin
     let name = find_mixin_name(node, content);
-    if name.is_empty() { return; }
+    if name.is_empty() {
+        return;
+    }
 
     let mut parents = Vec::new();
 
@@ -379,10 +394,14 @@ fn extract_extension(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>
         let on_type = if class_node.kind() == "type_identifier" {
             node_text(content, &class_node).to_string()
         } else {
-            find_first_type_identifier(&class_node, content)
-                .unwrap_or_default()
+            find_first_type_identifier(&class_node, content).unwrap_or_default()
         };
-        let base = on_type.split('<').next().unwrap_or(&on_type).trim().to_string();
+        let base = on_type
+            .split('<')
+            .next()
+            .unwrap_or(&on_type)
+            .trim()
+            .to_string();
         if !base.is_empty() {
             parents.push((base, "extends".to_string()));
         }
@@ -463,20 +482,19 @@ fn extract_typedef(node: &Node, content: &str, symbols: &mut Vec<ParsedSymbol>) 
     let line = node_line(node);
     let sig = line_text(content, line).trim().to_string();
 
-    let name = find_first_type_identifier(node, content)
-        .or_else(|| {
-            let text = node_text(content, node);
-            let after_typedef = text.strip_prefix("typedef")?.trim();
-            let name_part = after_typedef.split(|c: char| c == '=' || c == '(' || c == '<').next()?;
-            let tokens: Vec<&str> = name_part.split_whitespace().collect();
-            if tokens.len() >= 2 {
-                Some(tokens[tokens.len() - 1].to_string())
-            } else if tokens.len() == 1 {
-                Some(tokens[0].to_string())
-            } else {
-                None
-            }
-        });
+    let name = find_first_type_identifier(node, content).or_else(|| {
+        let text = node_text(content, node);
+        let after_typedef = text.strip_prefix("typedef")?.trim();
+        let name_part = after_typedef.split(['=', '(', '<']).next()?;
+        let tokens: Vec<&str> = name_part.split_whitespace().collect();
+        if tokens.len() >= 2 {
+            Some(tokens[tokens.len() - 1].to_string())
+        } else if tokens.len() == 1 {
+            Some(tokens[0].to_string())
+        } else {
+            None
+        }
+    });
 
     if let Some(name) = name {
         if !name.is_empty() {
@@ -899,13 +917,17 @@ fn try_parse_modified_class(text: &str) -> Option<ClassInfo> {
 
     // Find "class" keyword
     let class_idx = words.iter().position(|w| *w == "class")?;
-    if class_idx + 1 >= words.len() { return None; }
+    if class_idx + 1 >= words.len() {
+        return None;
+    }
 
     let name = words[class_idx + 1].to_string();
     // Strip generic parameters
     let name = name.split('<').next().unwrap_or(&name).trim().to_string();
 
-    if name.is_empty() { return None; }
+    if name.is_empty() {
+        return None;
+    }
 
     // Check for modifiers before "class"
     let modifiers: Vec<&str> = words[..class_idx].to_vec();
@@ -926,15 +948,29 @@ fn parse_parents_from_class_text(text: &str, parents: &mut Vec<(String, String)>
     let mut mode = "";
     for &word in &parts {
         match word {
-            "extends" => { mode = "extends"; continue; }
-            "with" => { mode = "with"; continue; }
-            "implements" => { mode = "implements"; continue; }
+            "extends" => {
+                mode = "extends";
+                continue;
+            }
+            "with" => {
+                mode = "with";
+                continue;
+            }
+            "implements" => {
+                mode = "implements";
+                continue;
+            }
             "class" | "sealed" | "base" | "final" | "abstract" | "interface" => continue,
             _ => {}
         }
         if !mode.is_empty() {
             // This word is a type name
-            let name = word.trim_end_matches(',').split('<').next().unwrap_or("").trim();
+            let name = word
+                .trim_end_matches(',')
+                .split('<')
+                .next()
+                .unwrap_or("")
+                .trim();
             if !name.is_empty() && name != "{" && name != "}" {
                 parents.push((name.to_string(), mode.to_string()));
             }
@@ -948,17 +984,31 @@ fn try_parse_extension_type(text: &str) -> Option<ExtTypeInfo> {
 
     // Find "type" keyword after "extension"
     let type_idx = words.iter().position(|w| *w == "type")?;
-    if type_idx + 1 >= words.len() { return None; }
+    if type_idx + 1 >= words.len() {
+        return None;
+    }
 
     let name_raw = words[type_idx + 1];
-    let name = name_raw.split('(').next().unwrap_or(name_raw).trim().to_string();
+    let name = name_raw
+        .split('(')
+        .next()
+        .unwrap_or(name_raw)
+        .trim()
+        .to_string();
 
-    if name.is_empty() { return None; }
+    if name.is_empty() {
+        return None;
+    }
 
     let mut parents = Vec::new();
     if let Some(impl_idx) = words.iter().position(|w| *w == "implements") {
         for &word in &words[impl_idx + 1..] {
-            let type_name = word.trim_end_matches(',').split('<').next().unwrap_or("").trim();
+            let type_name = word
+                .trim_end_matches(',')
+                .split('<')
+                .next()
+                .unwrap_or("")
+                .trim();
             if !type_name.is_empty() && type_name != "{" && type_name != "}" {
                 parents.push((type_name.to_string(), "implements".to_string()));
             }
@@ -969,19 +1019,34 @@ fn try_parse_extension_type(text: &str) -> Option<ExtTypeInfo> {
 }
 
 /// Extract parents from ERROR node text (for enum with/implements in tree-sitter-dart 0.0.4)
-fn extract_parents_from_error_text(node: &Node, content: &str, parents: &mut Vec<(String, String)>) {
+fn extract_parents_from_error_text(
+    node: &Node,
+    content: &str,
+    parents: &mut Vec<(String, String)>,
+) {
     let text = node_text(content, node);
     let words: Vec<&str> = text.split_whitespace().collect();
 
     let mut mode = "";
     for &word in &words {
         match word {
-            "with" => { mode = "with"; continue; }
-            "implements" => { mode = "implements"; continue; }
+            "with" => {
+                mode = "with";
+                continue;
+            }
+            "implements" => {
+                mode = "implements";
+                continue;
+            }
             _ => {}
         }
         if !mode.is_empty() {
-            let name = word.trim_end_matches(',').split('<').next().unwrap_or("").trim();
+            let name = word
+                .trim_end_matches(',')
+                .split('<')
+                .next()
+                .unwrap_or("")
+                .trim();
             if !name.is_empty() {
                 parents.push((name.to_string(), mode.to_string()));
             }
@@ -1038,8 +1103,13 @@ mod tests {
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
         let cls = symbols.iter().find(|s| s.name == "MyWidget").unwrap();
         assert_eq!(cls.kind, SymbolKind::Class);
-        assert!(cls.parents.iter().any(|(p, k)| p == "StatefulWidget" && k == "extends"),
-            "Expected extends StatefulWidget, got: {:?}", cls.parents);
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "StatefulWidget" && k == "extends"),
+            "Expected extends StatefulWidget, got: {:?}",
+            cls.parents
+        );
     }
 
     #[test]
@@ -1054,8 +1124,10 @@ mod tests {
     fn test_parse_sealed_class() {
         let content = "sealed class Result {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "Result").expect(
-            &format!("Should find sealed class Result, got: {:?}", symbols));
+        let cls = symbols.iter().find(|s| s.name == "Result").expect(&format!(
+            "Should find sealed class Result, got: {:?}",
+            symbols
+        ));
         assert_eq!(cls.kind, SymbolKind::Class);
     }
 
@@ -1064,21 +1136,44 @@ mod tests {
         let content = "abstract interface class AppScope {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
         let cls = symbols.iter().find(|s| s.name == "AppScope").unwrap();
-        assert_eq!(cls.kind, SymbolKind::Interface,
-            "abstract interface class should be Interface, got: {:?}", cls.kind);
+        assert_eq!(
+            cls.kind,
+            SymbolKind::Interface,
+            "abstract interface class should be Interface, got: {:?}",
+            cls.kind
+        );
     }
 
     #[test]
     fn test_parse_class_with_parents() {
-        let content = "class ApiService extends BaseService with LoggerMixin implements Disposable {\n}\n";
+        let content =
+            "class ApiService extends BaseService with LoggerMixin implements Disposable {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "ApiService" && s.kind == SymbolKind::Class).unwrap();
-        assert!(cls.parents.iter().any(|(p, k)| p == "BaseService" && k == "extends"),
-            "Expected extends BaseService, got: {:?}", cls.parents);
-        assert!(cls.parents.iter().any(|(p, k)| p == "LoggerMixin" && k == "with"),
-            "Expected with LoggerMixin, got: {:?}", cls.parents);
-        assert!(cls.parents.iter().any(|(p, k)| p == "Disposable" && k == "implements"),
-            "Expected implements Disposable, got: {:?}", cls.parents);
+        let cls = symbols
+            .iter()
+            .find(|s| s.name == "ApiService" && s.kind == SymbolKind::Class)
+            .unwrap();
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "BaseService" && k == "extends"),
+            "Expected extends BaseService, got: {:?}",
+            cls.parents
+        );
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "LoggerMixin" && k == "with"),
+            "Expected with LoggerMixin, got: {:?}",
+            cls.parents
+        );
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "Disposable" && k == "implements"),
+            "Expected implements Disposable, got: {:?}",
+            cls.parents
+        );
     }
 
     #[test]
@@ -1087,20 +1182,38 @@ mod tests {
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
         let m = symbols.iter().find(|s| s.name == "LoggerMixin").unwrap();
         assert_eq!(m.kind, SymbolKind::Interface);
-        assert!(m.parents.iter().any(|(p, k)| p == "Object" && k == "extends"),
-            "Expected extends Object, got: {:?}", m.parents);
+        assert!(
+            m.parents
+                .iter()
+                .any(|(p, k)| p == "Object" && k == "extends"),
+            "Expected extends Object, got: {:?}",
+            m.parents
+        );
     }
 
     #[test]
     fn test_parse_mixin_with_implements() {
         let content = "mixin _PublicAppScopeImpl on _AppScopeDeps implements AppScope {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let m = symbols.iter().find(|s| s.name == "_PublicAppScopeImpl").unwrap();
+        let m = symbols
+            .iter()
+            .find(|s| s.name == "_PublicAppScopeImpl")
+            .unwrap();
         assert_eq!(m.kind, SymbolKind::Interface);
-        assert!(m.parents.iter().any(|(p, k)| p == "_AppScopeDeps" && k == "extends"),
-            "should have _AppScopeDeps as extends parent, got: {:?}", m.parents);
-        assert!(m.parents.iter().any(|(p, k)| p == "AppScope" && k == "implements"),
-            "should have AppScope as implements parent, got: {:?}", m.parents);
+        assert!(
+            m.parents
+                .iter()
+                .any(|(p, k)| p == "_AppScopeDeps" && k == "extends"),
+            "should have _AppScopeDeps as extends parent, got: {:?}",
+            m.parents
+        );
+        assert!(
+            m.parents
+                .iter()
+                .any(|(p, k)| p == "AppScope" && k == "implements"),
+            "should have AppScope as implements parent, got: {:?}",
+            m.parents
+        );
     }
 
     #[test]
@@ -1109,19 +1222,29 @@ mod tests {
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
         let ext = symbols.iter().find(|s| s.name == "DateTimeX").unwrap();
         assert_eq!(ext.kind, SymbolKind::Object);
-        assert!(ext.parents.iter().any(|(p, k)| p == "DateTime" && k == "extends"),
-            "Expected extends DateTime, got: {:?}", ext.parents);
+        assert!(
+            ext.parents
+                .iter()
+                .any(|(p, k)| p == "DateTime" && k == "extends"),
+            "Expected extends DateTime, got: {:?}",
+            ext.parents
+        );
     }
 
     #[test]
     fn test_parse_extension_type() {
         let content = "extension type UserId(int id) implements int {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let et = symbols.iter().find(|s| s.name == "UserId").expect(
-            &format!("Should find extension type UserId, got: {:?}", symbols));
+        let et = symbols.iter().find(|s| s.name == "UserId").expect(&format!(
+            "Should find extension type UserId, got: {:?}",
+            symbols
+        ));
         assert_eq!(et.kind, SymbolKind::Class);
-        assert!(et.parents.iter().any(|(p, _)| p == "int"),
-            "Expected implements int, got: {:?}", et.parents);
+        assert!(
+            et.parents.iter().any(|(p, _)| p == "int"),
+            "Expected implements int, got: {:?}",
+            et.parents
+        );
     }
 
     #[test]
@@ -1134,14 +1257,23 @@ mod tests {
 
     #[test]
     fn test_parse_enum_with_parents() {
-        let content = "enum EnhancedEnum with Mixin implements Interface {\n  value1,\n  value2;\n}\n";
+        let content =
+            "enum EnhancedEnum with Mixin implements Interface {\n  value1,\n  value2;\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
         let e = symbols.iter().find(|s| s.name == "EnhancedEnum").unwrap();
         assert_eq!(e.kind, SymbolKind::Enum);
-        assert!(e.parents.iter().any(|(p, k)| p == "Mixin" && k == "with"),
-            "Expected with Mixin, got: {:?}", e.parents);
-        assert!(e.parents.iter().any(|(p, k)| p == "Interface" && k == "implements"),
-            "Expected implements Interface, got: {:?}", e.parents);
+        assert!(
+            e.parents.iter().any(|(p, k)| p == "Mixin" && k == "with"),
+            "Expected with Mixin, got: {:?}",
+            e.parents
+        );
+        assert!(
+            e.parents
+                .iter()
+                .any(|(p, k)| p == "Interface" && k == "implements"),
+            "Expected implements Interface, got: {:?}",
+            e.parents
+        );
     }
 
     #[test]
@@ -1164,24 +1296,39 @@ mod tests {
     fn test_parse_function() {
         let content = "void main() {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "main" && s.kind == SymbolKind::Function),
-            "Should find main function, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "main" && s.kind == SymbolKind::Function),
+            "Should find main function, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
     fn test_parse_async_function() {
         let content = "Future<int> fetchData() async {\n  return 0;\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "fetchData" && s.kind == SymbolKind::Function),
-            "Should find fetchData function, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "fetchData" && s.kind == SymbolKind::Function),
+            "Should find fetchData function, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
     fn test_parse_arrow_function() {
         let content = "String formatName(String first, String last) => '$first $last';\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "formatName" && s.kind == SymbolKind::Function),
-            "Should find formatName function, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "formatName" && s.kind == SymbolKind::Function),
+            "Should find formatName function, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -1194,14 +1341,26 @@ mod tests {
 }
 "#;
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let getters: Vec<_> = symbols.iter()
+        let getters: Vec<_> = symbols
+            .iter()
             .filter(|s| s.name == "count" && s.kind == SymbolKind::Property)
             .collect();
-        assert!(getters.len() >= 1, "should find getter 'count', got: {:?}", symbols);
-        let setters: Vec<_> = symbols.iter()
-            .filter(|s| s.name == "count" && s.kind == SymbolKind::Property && s.signature.contains("set "))
+        assert!(
+            getters.len() >= 1,
+            "should find getter 'count', got: {:?}",
+            symbols
+        );
+        let setters: Vec<_> = symbols
+            .iter()
+            .filter(|s| {
+                s.name == "count" && s.kind == SymbolKind::Property && s.signature.contains("set ")
+            })
             .collect();
-        assert!(setters.len() >= 1, "should find setter 'count', got: {:?}", symbols);
+        assert!(
+            setters.len() >= 1,
+            "should find setter 'count', got: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -1213,47 +1372,87 @@ mod tests {
 }
 "#;
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "MyService" && s.kind == SymbolKind::Class),
-            "Should find class MyService, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "MyService" && s.kind == SymbolKind::Class),
+            "Should find class MyService, got: {:?}",
+            symbols
+        );
         // Named constructors
-        assert!(symbols.iter().any(|s| s.name == "MyService.fromJson" && s.kind == SymbolKind::Function),
-            "Should find MyService.fromJson constructor, got: {:?}", symbols);
-        assert!(symbols.iter().any(|s| s.name == "MyService.create" && s.kind == SymbolKind::Function),
-            "Should find MyService.create factory constructor, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "MyService.fromJson" && s.kind == SymbolKind::Function),
+            "Should find MyService.fromJson constructor, got: {:?}",
+            symbols
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "MyService.create" && s.kind == SymbolKind::Function),
+            "Should find MyService.create factory constructor, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
     fn test_parse_import() {
         let content = "import 'package:flutter/material.dart';\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "material" && s.kind == SymbolKind::Import),
-            "Should find import 'material', got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "material" && s.kind == SymbolKind::Import),
+            "Should find import 'material', got: {:?}",
+            symbols
+        );
     }
 
     #[test]
     fn test_parse_export() {
         let content = "export 'src/my_widget.dart';\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "my_widget" && s.kind == SymbolKind::Import),
-            "Should find export 'my_widget', got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "my_widget" && s.kind == SymbolKind::Import),
+            "Should find export 'my_widget', got: {:?}",
+            symbols
+        );
     }
 
     #[test]
     fn test_parse_dart_async_import() {
         let content = "import 'dart:async';\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "dart:async" && s.kind == SymbolKind::Import),
-            "Should find import 'dart:async', got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "dart:async" && s.kind == SymbolKind::Import),
+            "Should find import 'dart:async', got: {:?}",
+            symbols
+        );
     }
 
     #[test]
     fn test_parse_property() {
         let content = "final String appName = 'MyApp';\nconst int maxRetries = 3;\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "appName" && s.kind == SymbolKind::Property),
-            "Should find property appName, got: {:?}", symbols);
-        assert!(symbols.iter().any(|s| s.name == "maxRetries" && s.kind == SymbolKind::Property),
-            "Should find property maxRetries, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "appName" && s.kind == SymbolKind::Property),
+            "Should find property appName, got: {:?}",
+            symbols
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "maxRetries" && s.kind == SymbolKind::Property),
+            "Should find property maxRetries, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -1265,12 +1464,21 @@ class RealClass {
 }
 "#;
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(!symbols.iter().any(|s| s.name == "FakeClass"),
-            "Should not find FakeClass in comments");
-        assert!(!symbols.iter().any(|s| s.name == "AnotherFake"),
-            "Should not find AnotherFake in comments");
-        assert!(symbols.iter().any(|s| s.name == "RealClass" && s.kind == SymbolKind::Class),
-            "Should find RealClass, got: {:?}", symbols);
+        assert!(
+            !symbols.iter().any(|s| s.name == "FakeClass"),
+            "Should not find FakeClass in comments"
+        );
+        assert!(
+            !symbols.iter().any(|s| s.name == "AnotherFake"),
+            "Should not find AnotherFake in comments"
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "RealClass" && s.kind == SymbolKind::Class),
+            "Should find RealClass, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -1281,10 +1489,20 @@ class RealClass {
 }
 "#;
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "init" && s.kind == SymbolKind::Function),
-            "Should find method init, got: {:?}", symbols);
-        assert!(symbols.iter().any(|s| s.name == "doSomething" && s.kind == SymbolKind::Function),
-            "Should find method doSomething, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "init" && s.kind == SymbolKind::Function),
+            "Should find method init, got: {:?}",
+            symbols
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "doSomething" && s.kind == SymbolKind::Function),
+            "Should find method doSomething, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -1294,10 +1512,20 @@ class RealClass {
 }
 "#;
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "ApiServiceX" && s.kind == SymbolKind::Object),
-            "Should find extension ApiServiceX, got: {:?}", symbols);
-        assert!(symbols.iter().any(|s| s.name == "ping" && s.kind == SymbolKind::Function),
-            "Should find method ping, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "ApiServiceX" && s.kind == SymbolKind::Object),
+            "Should find extension ApiServiceX, got: {:?}",
+            symbols
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "ping" && s.kind == SymbolKind::Function),
+            "Should find method ping, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -1307,10 +1535,20 @@ class RealClass {
 }
 "#;
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "LoggerMixin" && s.kind == SymbolKind::Interface),
-            "Should find mixin LoggerMixin, got: {:?}", symbols);
-        assert!(symbols.iter().any(|s| s.name == "log" && s.kind == SymbolKind::Function),
-            "Should find method log, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "LoggerMixin" && s.kind == SymbolKind::Interface),
+            "Should find mixin LoggerMixin, got: {:?}",
+            symbols
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "log" && s.kind == SymbolKind::Function),
+            "Should find method log, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -1360,16 +1598,31 @@ enum Status {
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
 
         // Imports
-        assert!(symbols.iter().any(|s| s.name == "material" && s.kind == SymbolKind::Import),
-            "Should find import 'material', got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "material" && s.kind == SymbolKind::Import),
+            "Should find import 'material', got: {:?}",
+            symbols
+        );
 
         // Typedef
-        assert!(symbols.iter().any(|s| s.name == "JsonMap" && s.kind == SymbolKind::TypeAlias),
-            "Should find typedef JsonMap, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "JsonMap" && s.kind == SymbolKind::TypeAlias),
+            "Should find typedef JsonMap, got: {:?}",
+            symbols
+        );
 
         // Property
-        assert!(symbols.iter().any(|s| s.name == "appVersion" && s.kind == SymbolKind::Property),
-            "Should find property appVersion, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "appVersion" && s.kind == SymbolKind::Property),
+            "Should find property appVersion, got: {:?}",
+            symbols
+        );
 
         // Mixin
         let mixin = symbols.iter().find(|s| s.name == "LoggerMixin").unwrap();
@@ -1380,56 +1633,122 @@ enum Status {
         assert_eq!(base.kind, SymbolKind::Class);
 
         // Class with full inheritance
-        let api = symbols.iter().find(|s| s.name == "ApiService" && s.kind == SymbolKind::Class).unwrap();
-        assert!(api.parents.iter().any(|(p, k)| p == "BaseService" && k == "extends"),
-            "Expected extends BaseService, got: {:?}", api.parents);
-        assert!(api.parents.iter().any(|(p, k)| p == "LoggerMixin" && k == "with"),
-            "Expected with LoggerMixin, got: {:?}", api.parents);
-        assert!(api.parents.iter().any(|(p, k)| p == "Disposable" && k == "implements"),
-            "Expected implements Disposable, got: {:?}", api.parents);
+        let api = symbols
+            .iter()
+            .find(|s| s.name == "ApiService" && s.kind == SymbolKind::Class)
+            .unwrap();
+        assert!(
+            api.parents
+                .iter()
+                .any(|(p, k)| p == "BaseService" && k == "extends"),
+            "Expected extends BaseService, got: {:?}",
+            api.parents
+        );
+        assert!(
+            api.parents
+                .iter()
+                .any(|(p, k)| p == "LoggerMixin" && k == "with"),
+            "Expected with LoggerMixin, got: {:?}",
+            api.parents
+        );
+        assert!(
+            api.parents
+                .iter()
+                .any(|(p, k)| p == "Disposable" && k == "implements"),
+            "Expected implements Disposable, got: {:?}",
+            api.parents
+        );
 
         // Constructors
-        assert!(symbols.iter().any(|s| s.name == "ApiService.withDefault" && s.kind == SymbolKind::Function),
-            "Should find constructor ApiService.withDefault, got: {:?}", symbols);
-        assert!(symbols.iter().any(|s| s.name == "ApiService.create" && s.kind == SymbolKind::Function),
-            "Should find factory ApiService.create, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "ApiService.withDefault" && s.kind == SymbolKind::Function),
+            "Should find constructor ApiService.withDefault, got: {:?}",
+            symbols
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "ApiService.create" && s.kind == SymbolKind::Function),
+            "Should find factory ApiService.create, got: {:?}",
+            symbols
+        );
 
         // Getter/Setter
-        assert!(symbols.iter().any(|s| s.name == "endpoint" && s.kind == SymbolKind::Property),
-            "Should find getter endpoint, got: {:?}", symbols);
-        assert!(symbols.iter().any(|s| s.name == "timeout" && s.kind == SymbolKind::Property),
-            "Should find setter timeout, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "endpoint" && s.kind == SymbolKind::Property),
+            "Should find getter endpoint, got: {:?}",
+            symbols
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "timeout" && s.kind == SymbolKind::Property),
+            "Should find setter timeout, got: {:?}",
+            symbols
+        );
 
         // Extension
         let ext = symbols.iter().find(|s| s.name == "ApiServiceX").unwrap();
         assert_eq!(ext.kind, SymbolKind::Object);
-        assert!(ext.parents.iter().any(|(p, k)| p == "ApiService" && k == "extends"),
-            "Expected extends ApiService, got: {:?}", ext.parents);
+        assert!(
+            ext.parents
+                .iter()
+                .any(|(p, k)| p == "ApiService" && k == "extends"),
+            "Expected extends ApiService, got: {:?}",
+            ext.parents
+        );
 
         // Enum
-        assert!(symbols.iter().any(|s| s.name == "Status" && s.kind == SymbolKind::Enum),
-            "Should find enum Status, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Status" && s.kind == SymbolKind::Enum),
+            "Should find enum Status, got: {:?}",
+            symbols
+        );
 
         // Function inside class
-        assert!(symbols.iter().any(|s| s.name == "init" && s.kind == SymbolKind::Function),
-            "Should find method init, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "init" && s.kind == SymbolKind::Function),
+            "Should find method init, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
     fn test_parse_class_with_generics() {
         let content = "class Repository<T extends Model> implements BaseRepo<T> {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "Repository" && s.kind == SymbolKind::Class).unwrap();
-        assert!(cls.parents.iter().any(|(p, k)| p == "BaseRepo" && k == "implements"),
-            "Expected implements BaseRepo, got: {:?}", cls.parents);
+        let cls = symbols
+            .iter()
+            .find(|s| s.name == "Repository" && s.kind == SymbolKind::Class)
+            .unwrap();
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "BaseRepo" && k == "implements"),
+            "Expected implements BaseRepo, got: {:?}",
+            cls.parents
+        );
     }
 
     #[test]
     fn test_parse_base_class() {
         let content = "base class BaseModel {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "BaseModel").expect(
-            &format!("Should find base class BaseModel, got: {:?}", symbols));
+        let cls = symbols
+            .iter()
+            .find(|s| s.name == "BaseModel")
+            .expect(&format!(
+                "Should find base class BaseModel, got: {:?}",
+                symbols
+            ));
         assert_eq!(cls.kind, SymbolKind::Class);
     }
 
@@ -1437,8 +1756,13 @@ enum Status {
     fn test_parse_final_class() {
         let content = "final class FinalModel {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "FinalModel").expect(
-            &format!("Should find final class FinalModel, got: {:?}", symbols));
+        let cls = symbols
+            .iter()
+            .find(|s| s.name == "FinalModel")
+            .expect(&format!(
+                "Should find final class FinalModel, got: {:?}",
+                symbols
+            ));
         assert_eq!(cls.kind, SymbolKind::Class);
     }
 
@@ -1446,8 +1770,13 @@ enum Status {
     fn test_parse_mixin_class() {
         let content = "mixin class MixinClass {\n}\n";
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "MixinClass").expect(
-            &format!("Should find mixin class MixinClass, got: {:?}", symbols));
+        let cls = symbols
+            .iter()
+            .find(|s| s.name == "MixinClass")
+            .expect(&format!(
+                "Should find mixin class MixinClass, got: {:?}",
+                symbols
+            ));
         assert_eq!(cls.kind, SymbolKind::Class);
     }
 
@@ -1459,12 +1788,27 @@ import 'package:provider/provider.dart';
 export 'src/utils.dart';
 "#;
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "material" && s.kind == SymbolKind::Import),
-            "Should find material import, got: {:?}", symbols);
-        assert!(symbols.iter().any(|s| s.name == "provider" && s.kind == SymbolKind::Import),
-            "Should find provider import, got: {:?}", symbols);
-        assert!(symbols.iter().any(|s| s.name == "utils" && s.kind == SymbolKind::Import),
-            "Should find utils export, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "material" && s.kind == SymbolKind::Import),
+            "Should find material import, got: {:?}",
+            symbols
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "provider" && s.kind == SymbolKind::Import),
+            "Should find provider import, got: {:?}",
+            symbols
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "utils" && s.kind == SymbolKind::Import),
+            "Should find utils export, got: {:?}",
+            symbols
+        );
     }
 
     #[test]
@@ -1474,15 +1818,38 @@ export 'src/utils.dart';
 }
 "#;
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "_AppScopeContainer" && s.kind == SymbolKind::Class).unwrap();
-        assert!(cls.parents.iter().any(|(p, k)| p == "AppScopeContainer" && k == "extends"),
-            "should have AppScopeContainer as extends, got: {:?}", cls.parents);
-        assert!(cls.parents.iter().any(|(p, k)| p == "_AppScopeDeps" && k == "with"),
-            "should have _AppScopeDeps as with, got: {:?}", cls.parents);
-        assert!(cls.parents.iter().any(|(p, k)| p == "_AppScopeInitializeQueue" && k == "with"),
-            "should have _AppScopeInitializeQueue as with, got: {:?}", cls.parents);
-        assert!(cls.parents.iter().any(|(p, k)| p == "_PublicAppScopeImpl" && k == "with"),
-            "should have _PublicAppScopeImpl as with, got: {:?}", cls.parents);
+        let cls = symbols
+            .iter()
+            .find(|s| s.name == "_AppScopeContainer" && s.kind == SymbolKind::Class)
+            .unwrap();
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "AppScopeContainer" && k == "extends"),
+            "should have AppScopeContainer as extends, got: {:?}",
+            cls.parents
+        );
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "_AppScopeDeps" && k == "with"),
+            "should have _AppScopeDeps as with, got: {:?}",
+            cls.parents
+        );
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "_AppScopeInitializeQueue" && k == "with"),
+            "should have _AppScopeInitializeQueue as with, got: {:?}",
+            cls.parents
+        );
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "_PublicAppScopeImpl" && k == "with"),
+            "should have _PublicAppScopeImpl as with, got: {:?}",
+            cls.parents
+        );
     }
 
     #[test]
@@ -1492,7 +1859,12 @@ String get appName => 'MyApp';
 set appName(String value) {}
 "#;
         let symbols = DART_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "appName" && s.kind == SymbolKind::Property),
-            "Should find top-level getter appName, got: {:?}", symbols);
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "appName" && s.kind == SymbolKind::Property),
+            "Should find top-level getter appName, got: {:?}",
+            symbols
+        );
     }
 }

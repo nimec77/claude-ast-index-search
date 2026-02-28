@@ -22,7 +22,7 @@ pub mod typescript;
 use anyhow::Result;
 use tree_sitter::{Language, Parser, Tree};
 
-use super::{ParsedSymbol, ParsedRef, extract_references, FileType};
+use super::{FileType, ParsedRef, ParsedSymbol, extract_references};
 
 /// Trait for tree-sitter based language parsers
 pub trait LanguageParser: Send + Sync {
@@ -62,8 +62,11 @@ pub fn get_treesitter_parser(file_type: FileType) -> Option<&'static dyn Languag
 fn parse_tree(content: &str, language: &Language) -> Result<Tree> {
     PARSER.with(|p| {
         let mut parser = p.borrow_mut();
-        parser.set_language(language).map_err(|e| anyhow::anyhow!("Failed to set language: {}", e))?;
-        parser.parse(content, None)
+        parser
+            .set_language(language)
+            .map_err(|e| anyhow::anyhow!("Failed to set language: {}", e))?;
+        parser
+            .parse(content, None)
             .ok_or_else(|| anyhow::anyhow!("tree-sitter parse returned None"))
     })
 }

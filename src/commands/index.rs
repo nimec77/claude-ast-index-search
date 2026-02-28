@@ -14,13 +14,20 @@ use std::time::Instant;
 use anyhow::Result;
 use colored::Colorize;
 use regex::Regex;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
+use super::{relative_path, search_files};
 use crate::db::{self, SearchScope};
-use super::{search_files, relative_path};
 
 /// Full-text search across files, symbols, and file contents
-pub fn cmd_search(root: &Path, query: &str, limit: usize, format: &str, scope: &SearchScope, fuzzy: bool) -> Result<()> {
+pub fn cmd_search(
+    root: &Path,
+    query: &str,
+    limit: usize,
+    format: &str,
+    scope: &SearchScope,
+    fuzzy: bool,
+) -> Result<()> {
     let total_start = Instant::now();
 
     if !db::db_exists(root) {
@@ -61,21 +68,36 @@ pub fn cmd_search(root: &Path, query: &str, limit: usize, format: &str, scope: &
     let pattern = regex::escape(query);
     let mut content_matches: Vec<(String, usize, String)> = vec![];
 
-    super::search_files_limited(root, &pattern, &["kt", "java", "swift", "m", "h", "py", "go", "rs", "cpp", "c", "proto", "ts", "tsx", "js", "jsx"], limit, |path, line_num, line| {
-        let rel_path = super::relative_path(root, path);
-        // Apply scope filter for grep results
-        if let Some(prefix) = scope.dir_prefix {
-            if !rel_path.starts_with(prefix) { return; }
-        }
-        if let Some(in_file) = scope.in_file {
-            if !rel_path.contains(in_file) { return; }
-        }
-        if let Some(module) = scope.module {
-            if !rel_path.starts_with(module) { return; }
-        }
-        let content: String = line.trim().chars().take(100).collect();
-        content_matches.push((rel_path, line_num, content));
-    })?;
+    super::search_files_limited(
+        root,
+        &pattern,
+        &[
+            "kt", "java", "swift", "m", "h", "py", "go", "rs", "cpp", "c", "proto", "ts", "tsx",
+            "js", "jsx",
+        ],
+        limit,
+        |path, line_num, line| {
+            let rel_path = super::relative_path(root, path);
+            // Apply scope filter for grep results
+            if let Some(prefix) = scope.dir_prefix {
+                if !rel_path.starts_with(prefix) {
+                    return;
+                }
+            }
+            if let Some(in_file) = scope.in_file {
+                if !rel_path.contains(in_file) {
+                    return;
+                }
+            }
+            if let Some(module) = scope.module {
+                if !rel_path.starts_with(module) {
+                    return;
+                }
+            }
+            let content: String = line.trim().chars().take(100).collect();
+            content_matches.push((rel_path, line_num, content));
+        },
+    )?;
     let content_time = content_start.elapsed();
 
     if format == "json" {
@@ -131,20 +153,40 @@ pub fn cmd_search(root: &Path, query: &str, limit: usize, format: &str, scope: &
         }
     }
 
-    if files.is_empty() && symbols.is_empty() && ref_matches.is_empty() && content_matches.is_empty() {
+    if files.is_empty()
+        && symbols.is_empty()
+        && ref_matches.is_empty()
+        && content_matches.is_empty()
+    {
         println!("  No results found.");
     }
 
     // Timing breakdown
-    eprintln!("\n{}", format!(
-        "Time: {:?} (files: {:?}, symbols: {:?}, refs: {:?}, content: {:?})",
-        total_start.elapsed(), files_time, symbols_time, refs_time, content_time
-    ).dimmed());
+    eprintln!(
+        "\n{}",
+        format!(
+            "Time: {:?} (files: {:?}, symbols: {:?}, refs: {:?}, content: {:?})",
+            total_start.elapsed(),
+            files_time,
+            symbols_time,
+            refs_time,
+            content_time
+        )
+        .dimmed()
+    );
     Ok(())
 }
 
 /// Find symbol by name
-pub fn cmd_symbol(root: &Path, name: &str, kind: Option<&str>, limit: usize, format: &str, scope: &SearchScope, fuzzy: bool) -> Result<()> {
+pub fn cmd_symbol(
+    root: &Path,
+    name: &str,
+    kind: Option<&str>,
+    limit: usize,
+    format: &str,
+    scope: &SearchScope,
+    fuzzy: bool,
+) -> Result<()> {
     let start = Instant::now();
 
     if !db::db_exists(root) {
@@ -190,7 +232,14 @@ pub fn cmd_symbol(root: &Path, name: &str, kind: Option<&str>, limit: usize, for
 }
 
 /// Find class by name (classes, interfaces, objects, enums)
-pub fn cmd_class(root: &Path, name: &str, limit: usize, format: &str, scope: &SearchScope, fuzzy: bool) -> Result<()> {
+pub fn cmd_class(
+    root: &Path,
+    name: &str,
+    limit: usize,
+    format: &str,
+    scope: &SearchScope,
+    fuzzy: bool,
+) -> Result<()> {
     let start = Instant::now();
 
     if !db::db_exists(root) {
@@ -208,7 +257,19 @@ pub fn cmd_class(root: &Path, name: &str, limit: usize, format: &str, scope: &Se
         // Fuzzy: search all symbols then filter to class-like kinds
         let all = db::search_symbols_fuzzy(&conn, name, limit * 5)?;
         all.into_iter()
-            .filter(|s| matches!(s.kind.as_str(), "class" | "interface" | "object" | "enum" | "protocol" | "struct" | "actor" | "package"))
+            .filter(|s| {
+                matches!(
+                    s.kind.as_str(),
+                    "class"
+                        | "interface"
+                        | "object"
+                        | "enum"
+                        | "protocol"
+                        | "struct"
+                        | "actor"
+                        | "package"
+                )
+            })
             .take(limit)
             .collect()
     } else {
@@ -235,7 +296,13 @@ pub fn cmd_class(root: &Path, name: &str, limit: usize, format: &str, scope: &Se
 }
 
 /// Find implementations of interface/class
-pub fn cmd_implementations(root: &Path, parent: &str, limit: usize, format: &str, scope: &SearchScope) -> Result<()> {
+pub fn cmd_implementations(
+    root: &Path,
+    parent: &str,
+    limit: usize,
+    format: &str,
+    scope: &SearchScope,
+) -> Result<()> {
     let start = Instant::now();
 
     if !db::db_exists(root) {
@@ -252,15 +319,22 @@ pub fn cmd_implementations(root: &Path, parent: &str, limit: usize, format: &str
     } else {
         // For scoped implementations, filter results post-query
         let all = db::find_implementations(&conn, parent, limit * 5)?;
-        all.into_iter().filter(|s| {
-            if let Some(in_file) = scope.in_file {
-                if !s.path.contains(in_file) { return false; }
-            }
-            if let Some(module) = scope.module {
-                if !s.path.starts_with(module) { return false; }
-            }
-            true
-        }).take(limit).collect()
+        all.into_iter()
+            .filter(|s| {
+                if let Some(in_file) = scope.in_file {
+                    if !s.path.contains(in_file) {
+                        return false;
+                    }
+                }
+                if let Some(module) = scope.module {
+                    if !s.path.starts_with(module) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .take(limit)
+            .collect()
     };
 
     if format == "json" {
@@ -268,10 +342,7 @@ pub fn cmd_implementations(root: &Path, parent: &str, limit: usize, format: &str
         return Ok(());
     }
 
-    println!(
-        "{}",
-        format!("Implementations of '{}':", parent).bold()
-    );
+    println!("{}", format!("Implementations of '{}':", parent).bold());
 
     for s in &impls {
         println!("  {} [{}]: {}:{}", s.name.cyan(), s.kind, s.path, s.line);
@@ -368,7 +439,11 @@ pub fn cmd_hierarchy(root: &Path, name: &str) -> Result<()> {
     let packages = db::find_symbols_by_name(&conn, name, Some("package"), 1)?;
     let protocols = db::find_symbols_by_name(&conn, name, Some("protocol"), 1)?;
 
-    let target = classes.first().or(interfaces.first()).or(packages.first()).or(protocols.first());
+    let target = classes
+        .first()
+        .or(interfaces.first())
+        .or(packages.first())
+        .or(protocols.first());
 
     if target.is_none() {
         println!("{}", format!("Class '{}' not found.", name).red());
@@ -406,7 +481,13 @@ pub fn cmd_hierarchy(root: &Path, name: &str) -> Result<()> {
 }
 
 /// Find symbol usages (indexed or grep-based)
-pub fn cmd_usages(root: &Path, symbol: &str, limit: usize, format: &str, scope: &SearchScope) -> Result<()> {
+pub fn cmd_usages(
+    root: &Path,
+    symbol: &str,
+    limit: usize,
+    format: &str,
+    scope: &SearchScope,
+) -> Result<()> {
     let start = Instant::now();
 
     // Try to use index first
@@ -415,7 +496,13 @@ pub fn cmd_usages(root: &Path, symbol: &str, limit: usize, format: &str, scope: 
         let conn = Connection::open(&db_path)?;
 
         // Check if refs table has data
-        let refs_count: i64 = conn.query_row("SELECT COUNT(*) FROM refs WHERE name = ?1 LIMIT 1", params![symbol], |row| row.get(0)).unwrap_or(0);
+        let refs_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM refs WHERE name = ?1 LIMIT 1",
+                params![symbol],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         if refs_count > 0 {
             // Use indexed references with scope filtering
@@ -426,7 +513,10 @@ pub fn cmd_usages(root: &Path, symbol: &str, limit: usize, format: &str, scope: 
                 return Ok(());
             }
 
-            println!("{}", format!("Usages of '{}' ({}):", symbol, refs.len()).bold());
+            println!(
+                "{}",
+                format!("Usages of '{}' ({}):", symbol, refs.len()).bold()
+            );
 
             for r in &refs {
                 println!("  {}:{}", r.path.cyan(), r.line);
@@ -440,7 +530,10 @@ pub fn cmd_usages(root: &Path, symbol: &str, limit: usize, format: &str, scope: 
                 println!("  No usages found in index.");
             }
 
-            eprintln!("\n{}", format!("Time: {:?} (indexed)", start.elapsed()).dimmed());
+            eprintln!(
+                "\n{}",
+                format!("Time: {:?} (indexed)", start.elapsed()).dimmed()
+            );
             return Ok(());
         }
     }
@@ -455,32 +548,44 @@ pub fn cmd_usages(root: &Path, symbol: &str, limit: usize, format: &str, scope: 
     let mut usages: Vec<(String, usize, String)> = vec![];
 
     search_files(root, &pattern, &["kt", "java"], |path, line_num, line| {
-        if usages.len() >= limit { return; }
+        if usages.len() >= limit {
+            return;
+        }
 
         // Skip definitions
-        if def_pattern.is_match(line) { return; }
+        if def_pattern.is_match(line) {
+            return;
+        }
 
         let rel_path = relative_path(root, path);
         // Apply scope filter for grep results
         if let Some(in_file) = scope.in_file {
-            if !rel_path.contains(in_file) { return; }
+            if !rel_path.contains(in_file) {
+                return;
+            }
         }
         if let Some(module) = scope.module {
-            if !rel_path.starts_with(module) { return; }
+            if !rel_path.starts_with(module) {
+                return;
+            }
         }
         let content: String = line.trim().chars().take(80).collect();
         usages.push((rel_path, line_num, content));
     })?;
 
     if format == "json" {
-        let result: Vec<_> = usages.iter().map(|(p, l, c)| {
-            serde_json::json!({"path": p, "line": l, "content": c})
-        }).collect();
+        let result: Vec<_> = usages
+            .iter()
+            .map(|(p, l, c)| serde_json::json!({"path": p, "line": l, "content": c}))
+            .collect();
         println!("{}", serde_json::to_string_pretty(&result)?);
         return Ok(());
     }
 
-    println!("{}", format!("Usages of '{}' ({}):", symbol, usages.len()).bold());
+    println!(
+        "{}",
+        format!("Usages of '{}' ({}):", symbol, usages.len()).bold()
+    );
 
     for (path, line_num, content) in &usages {
         println!("  {}:{}", path.cyan(), line_num);
@@ -491,6 +596,9 @@ pub fn cmd_usages(root: &Path, symbol: &str, limit: usize, format: &str, scope: 
         println!("  No usages found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?} (grep)", start.elapsed()).dimmed());
+    eprintln!(
+        "\n{}",
+        format!("Time: {:?} (grep)", start.elapsed()).dimmed()
+    );
     Ok(())
 }

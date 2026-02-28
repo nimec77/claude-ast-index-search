@@ -126,7 +126,9 @@ fn detect_project_type(conn: &rusqlite::Connection) -> String {
         .unwrap();
 
     let rows = stmt
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
         .unwrap();
 
     for r in rows.flatten() {
@@ -193,7 +195,10 @@ pub fn cmd_map(
     let start = Instant::now();
 
     if !db::db_exists(root) {
-        println!("{}", "Index not found. Run 'ast-index rebuild' first.".red());
+        println!(
+            "{}",
+            "Index not found. Run 'ast-index rebuild' first.".red()
+        );
         return Ok(());
     }
 
@@ -204,7 +209,16 @@ pub fn cmd_map(
     let depth = if stats.file_count > 5000 { 3 } else { 2 };
 
     if module.is_some() {
-        cmd_map_detailed(&conn, &project_type, &stats, module, per_dir, limit, depth, format)?;
+        cmd_map_detailed(
+            &conn,
+            &project_type,
+            &stats,
+            module,
+            per_dir,
+            limit,
+            depth,
+            format,
+        )?;
     } else {
         cmd_map_summary(&conn, &project_type, &stats, limit, depth, format)?;
     }
@@ -250,7 +264,11 @@ fn cmd_map_summary(
         })?;
         for row in rows.flatten() {
             let dir = dir_prefix(&row.0, depth);
-            *dir_kind_counts.entry(dir).or_default().entry(row.1).or_insert(0) += 1;
+            *dir_kind_counts
+                .entry(dir)
+                .or_default()
+                .entry(row.1)
+                .or_insert(0) += 1;
         }
     }
 
@@ -260,7 +278,11 @@ fn cmd_map_summary(
         .map(|(dir, fc)| {
             let kinds = dir_kind_counts.remove(&dir).unwrap_or_default();
             SummaryGroup {
-                path: if dir.is_empty() { ".".to_string() } else { format!("{}/", dir) },
+                path: if dir.is_empty() {
+                    ".".to_string()
+                } else {
+                    format!("{}/", dir)
+                },
                 file_count: fc,
                 kinds,
             }
@@ -289,7 +311,11 @@ fn cmd_map_summary(
         "{}",
         format!(
             "Project: {} | {} files | {} modules | top {} of {} dirs",
-            project_type, stats.file_count, stats.module_count, groups.len(), total_dirs
+            project_type,
+            stats.file_count,
+            stats.module_count,
+            groups.len(),
+            total_dirs
         )
         .bold()
     );
@@ -297,15 +323,15 @@ fn cmd_map_summary(
 
     for g in &groups {
         // Build compact kind summary: "12 cls, 3 iface, 2 enum"
-        let mut kind_pairs: Vec<(&str, i64)> = g.kinds.iter()
-            .map(|(k, &v)| (kind_label(k), v))
-            .collect();
+        let mut kind_pairs: Vec<(&str, i64)> =
+            g.kinds.iter().map(|(k, &v)| (kind_label(k), v)).collect();
         kind_pairs.sort_by(|a, b| kind_priority(a.0).cmp(&kind_priority(b.0)));
 
         let kinds_str = if kind_pairs.is_empty() {
             String::new()
         } else {
-            let items: Vec<String> = kind_pairs.iter()
+            let items: Vec<String> = kind_pairs
+                .iter()
                 .map(|(k, v)| format!("{} {}", v, k))
                 .collect();
             format!(" | {}", items.join(", "))
@@ -334,6 +360,7 @@ fn cmd_map_summary(
 }
 
 /// Detailed mode: symbols with inheritance per directory (when --module is used)
+#[allow(clippy::too_many_arguments)]
 fn cmd_map_detailed(
     conn: &rusqlite::Connection,
     project_type: &str,
@@ -419,17 +446,19 @@ fn cmd_map_detailed(
         };
         let mut inh_stmt = conn.prepare(inh_sql)?;
         let inh_rows = if let Some(ref mf) = module_filter {
-            inh_stmt.query_map(params![mf], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })?
-            .filter_map(|r| r.ok())
-            .collect::<Vec<_>>()
+            inh_stmt
+                .query_map(params![mf], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .filter_map(|r| r.ok())
+                .collect::<Vec<_>>()
         } else {
-            inh_stmt.query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })?
-            .filter_map(|r| r.ok())
-            .collect::<Vec<_>>()
+            inh_stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .filter_map(|r| r.ok())
+                .collect::<Vec<_>>()
         };
         for (name, parent) in inh_rows {
             let parents = inheritance_map.entry(name).or_default();
@@ -456,11 +485,13 @@ fn cmd_map_detailed(
         };
         let mut fc_stmt = conn.prepare(fc_sql)?;
         let file_rows: Vec<String> = if let Some(ref mf) = module_filter {
-            fc_stmt.query_map(params![mf], |row| row.get::<_, String>(0))?
+            fc_stmt
+                .query_map(params![mf], |row| row.get::<_, String>(0))?
                 .filter_map(|r| r.ok())
                 .collect()
         } else {
-            fc_stmt.query_map([], |row| row.get::<_, String>(0))?
+            fc_stmt
+                .query_map([], |row| row.get::<_, String>(0))?
                 .filter_map(|r| r.ok())
                 .collect()
         };
@@ -493,16 +524,8 @@ fn cmd_map_detailed(
         let map_syms: Vec<MapSymbol> = sorted
             .iter()
             .map(|s| {
-                let parents = inheritance_map
-                    .get(&s.name)
-                    .cloned()
-                    .unwrap_or_default();
-                let file = s
-                    .path
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(&s.path)
-                    .to_string();
+                let parents = inheritance_map.get(&s.name).cloned().unwrap_or_default();
+                let file = s.path.rsplit('/').next().unwrap_or(&s.path).to_string();
                 MapSymbol {
                     name: s.name.clone(),
                     kind: s.kind.clone(),
@@ -550,23 +573,14 @@ fn cmd_map_detailed(
         if g.symbols.is_empty() {
             continue;
         }
-        println!(
-            "{} ({} files)",
-            g.path.cyan(),
-            g.file_count
-        );
+        println!("{} ({} files)", g.path.cyan(), g.file_count);
         for s in &g.symbols {
             let parents_str = if s.parents.is_empty() {
                 String::new()
             } else {
                 format!(" > {}", s.parents.join(", "))
             };
-            println!(
-                "  {} : {}{}",
-                s.name.yellow(),
-                s.kind,
-                parents_str
-            );
+            println!("  {} : {}{}", s.name.yellow(), s.kind, parents_str);
         }
         println!();
     }
@@ -597,12 +611,38 @@ struct NamingPattern {
 
 /// Known suffix patterns to look for
 const NAMING_SUFFIXES: &[&str] = &[
-    "ViewModel", "Repository", "UseCase", "Service", "Controller",
-    "Interactor", "Presenter", "Factory", "Mapper", "Provider",
-    "Manager", "Handler", "Adapter", "Delegate", "Store", "Reducer",
-    "Component", "Fragment", "Activity", "Screen", "View", "Widget",
-    "Bloc", "Cubit", "Test", "Spec", "Module", "Router", "Navigator",
-    "Middleware", "Interceptor", "Gateway",
+    "ViewModel",
+    "Repository",
+    "UseCase",
+    "Service",
+    "Controller",
+    "Interactor",
+    "Presenter",
+    "Factory",
+    "Mapper",
+    "Provider",
+    "Manager",
+    "Handler",
+    "Adapter",
+    "Delegate",
+    "Store",
+    "Reducer",
+    "Component",
+    "Fragment",
+    "Activity",
+    "Screen",
+    "View",
+    "Widget",
+    "Bloc",
+    "Cubit",
+    "Test",
+    "Spec",
+    "Module",
+    "Router",
+    "Navigator",
+    "Middleware",
+    "Interceptor",
+    "Gateway",
 ];
 
 /// Known import prefixes → (category, display_name)
@@ -650,7 +690,11 @@ const FRAMEWORK_RULES: &[(&str, &str, &str)] = &[
     ("org.mockito", "Testing", "Mockito"),
     ("io.mockk", "Testing", "MockK"),
     // Serialization
-    ("kotlinx.serialization", "Serialization", "kotlinx.serialization"),
+    (
+        "kotlinx.serialization",
+        "Serialization",
+        "kotlinx.serialization",
+    ),
     ("com.google.gson", "Serialization", "Gson"),
     ("com.squareup.moshi", "Serialization", "Moshi"),
     ("com.fasterxml.jackson", "Serialization", "Jackson"),
@@ -658,7 +702,10 @@ const FRAMEWORK_RULES: &[(&str, &str, &str)] = &[
 
 /// Architecture detection patterns (path-based)
 const ARCH_PATTERNS: &[(&[&str], &str)] = &[
-    (&["/presentation/", "/domain/", "/data/"], "Clean Architecture"),
+    (
+        &["/presentation/", "/domain/", "/data/"],
+        "Clean Architecture",
+    ),
     (&["/feature/"], "Feature-sliced"),
     (&["/features/"], "Feature-sliced"),
     (&["/bloc/", "/state/", "/event/"], "BLoC"),
@@ -674,7 +721,10 @@ pub fn cmd_conventions(root: &Path, format: &str) -> Result<()> {
     let start = Instant::now();
 
     if !db::db_exists(root) {
-        println!("{}", "Index not found. Run 'ast-index rebuild' first.".red());
+        println!(
+            "{}",
+            "Index not found. Run 'ast-index rebuild' first.".red()
+        );
         return Ok(());
     }
 
@@ -757,15 +807,18 @@ pub fn cmd_conventions(root: &Path, format: &str) -> Result<()> {
             .filter_map(|r| r.ok())
             .collect();
 
-        let lower_paths: Vec<String> = paths.iter().map(|p| format!("/{}/", p.to_lowercase())).collect();
+        let lower_paths: Vec<String> = paths
+            .iter()
+            .map(|p| format!("/{}/", p.to_lowercase()))
+            .collect();
 
         for &(markers, label) in ARCH_PATTERNS {
             if arch.contains(&label.to_string()) {
                 continue;
             }
-            let all_found = markers.iter().all(|marker| {
-                lower_paths.iter().any(|p| p.contains(marker))
-            });
+            let all_found = markers
+                .iter()
+                .all(|marker| lower_paths.iter().any(|p| p.contains(marker)));
             if all_found {
                 arch.push(label.to_string());
             }

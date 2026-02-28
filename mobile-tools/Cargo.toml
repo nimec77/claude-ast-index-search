@@ -1,7 +1,7 @@
 [package]
 name = "mobile-tools"
 version = "2.8.0"
-edition = "2021"
+edition = "2024"
 description = "Fast native CLI for mobile device automation (Android/iOS/Aurora/Desktop)"
 authors = ["defendend", "Alex Gladkov"]
 license = "MIT"

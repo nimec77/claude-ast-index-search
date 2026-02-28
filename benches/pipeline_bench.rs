@@ -1,8 +1,8 @@
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use rusqlite::{params, Connection};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use rusqlite::{Connection, params};
 
 use ast_index::db;
-use ast_index::parsers::{parse_file_symbols, FileType};
+use ast_index::parsers::{FileType, parse_file_symbols};
 
 const KOTLIN_CODE: &str = r#"
 package com.example.payments

@@ -1,14 +1,15 @@
 //! Tree-sitter based TypeScript/JavaScript parser
 
 use anyhow::Result;
-use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 use std::sync::LazyLock;
+use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
+use super::{LanguageParser, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
-use super::{LanguageParser, parse_tree, node_text, node_line, line_text};
 
-static TS_LANGUAGE: LazyLock<Language> = LazyLock::new(|| tree_sitter_typescript::LANGUAGE_TSX.into());
+static TS_LANGUAGE: LazyLock<Language> =
+    LazyLock::new(|| tree_sitter_typescript::LANGUAGE_TSX.into());
 
 static TS_QUERY: LazyLock<Query> = LazyLock::new(|| {
     Query::new(&TS_LANGUAGE, include_str!("queries/typescript.scm"))
@@ -21,34 +22,55 @@ pub struct TypeScriptParser;
 
 /// Significant decorators to track
 const SIGNIFICANT_DECORATORS: &[&str] = &[
-    "Controller", "Get", "Post", "Put", "Delete", "Patch",
-    "Injectable", "Module", "Component", "Service", "Entity", "Column",
+    "Controller",
+    "Get",
+    "Post",
+    "Put",
+    "Delete",
+    "Patch",
+    "Injectable",
+    "Module",
+    "Component",
+    "Service",
+    "Entity",
+    "Column",
 ];
 
 /// Check if a name is PascalCase (starts with uppercase letter)
 fn is_pascal_case(name: &str) -> bool {
-    name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+    name.chars()
+        .next()
+        .map(|c| c.is_uppercase())
+        .unwrap_or(false)
 }
 
 /// Check if a name is a React hook (starts with "use" followed by uppercase)
 fn is_hook(name: &str) -> bool {
     name.starts_with("use")
         && name.len() > 3
-        && name.chars().nth(3).map(|c| c.is_uppercase()).unwrap_or(false)
+        && name
+            .chars()
+            .nth(3)
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
 }
 
 /// Check if a name is ALL_CAPS constant
 fn is_all_caps(name: &str) -> bool {
     !name.is_empty()
-        && name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
-        && name.chars().all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_')
+        && name
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        && name
+            .chars()
+            .all(|c| c.is_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
 /// Check if an import source is a relative/local import
 fn is_relative_import(source: &str) -> bool {
-    source.starts_with('.')
-        || source.starts_with("@/")
-        || source.starts_with('~')
+    source.starts_with('.') || source.starts_with("@/") || source.starts_with('~')
 }
 
 /// Extract parent types from a class_heritage node (extends_clause, implements_clause)
@@ -77,7 +99,10 @@ fn extract_class_parents(content: &str, class_node: &tree_sitter::Node) -> Vec<(
                                 // Generic type like BaseService<T> - get the first named child (type name)
                                 if let Some(first) = ec_child.named_child(0) {
                                     let kind = first.kind();
-                                    if kind == "type_identifier" || kind == "identifier" || kind == "nested_identifier" {
+                                    if kind == "type_identifier"
+                                        || kind == "identifier"
+                                        || kind == "nested_identifier"
+                                    {
                                         let name = node_text(content, &first);
                                         parents.push((name.to_string(), "extends".to_string()));
                                     }
@@ -100,7 +125,10 @@ fn extract_class_parents(content: &str, class_node: &tree_sitter::Node) -> Vec<(
                             "generic_type" => {
                                 if let Some(first) = ic_child.named_child(0) {
                                     let kind = first.kind();
-                                    if kind == "type_identifier" || kind == "identifier" || kind == "nested_identifier" {
+                                    if kind == "type_identifier"
+                                        || kind == "identifier"
+                                        || kind == "nested_identifier"
+                                    {
                                         let name = node_text(content, &first);
                                         parents.push((name.to_string(), "implements".to_string()));
                                     }
@@ -118,7 +146,10 @@ fn extract_class_parents(content: &str, class_node: &tree_sitter::Node) -> Vec<(
 }
 
 /// Extract parent types from an interface's extends_type_clause
-fn extract_interface_parents(content: &str, iface_node: &tree_sitter::Node) -> Vec<(String, String)> {
+fn extract_interface_parents(
+    content: &str,
+    iface_node: &tree_sitter::Node,
+) -> Vec<(String, String)> {
     let mut parents = Vec::new();
     let mut cursor = iface_node.walk();
 
@@ -127,7 +158,10 @@ fn extract_interface_parents(content: &str, iface_node: &tree_sitter::Node) -> V
             let mut etc_cursor = child.walk();
             for etc_child in child.children(&mut etc_cursor) {
                 match etc_child.kind() {
-                    "type_identifier" | "identifier" | "nested_identifier" | "nested_type_identifier" => {
+                    "type_identifier"
+                    | "identifier"
+                    | "nested_identifier"
+                    | "nested_type_identifier" => {
                         let name = node_text(content, &etc_child);
                         let name = name.split('<').next().unwrap_or(name).trim();
                         if !name.is_empty() {
@@ -137,7 +171,10 @@ fn extract_interface_parents(content: &str, iface_node: &tree_sitter::Node) -> V
                     "generic_type" => {
                         if let Some(first) = etc_child.named_child(0) {
                             let kind = first.kind();
-                            if kind == "type_identifier" || kind == "identifier" || kind == "nested_type_identifier" {
+                            if kind == "type_identifier"
+                                || kind == "identifier"
+                                || kind == "nested_type_identifier"
+                            {
                                 let name = node_text(content, &first);
                                 parents.push((name.to_string(), "extends".to_string()));
                             }
@@ -161,7 +198,10 @@ impl LanguageParser for TypeScriptParser {
 
         let capture_names = query.capture_names();
         let idx = |name: &str| -> Option<u32> {
-            capture_names.iter().position(|n| *n == name).map(|i| i as u32)
+            capture_names
+                .iter()
+                .position(|n| *n == name)
+                .map(|i| i as u32)
         };
 
         // Class captures
@@ -231,7 +271,8 @@ impl LanguageParser for TypeScriptParser {
         let idx_abstract_method_node = idx("abstract_method_node");
 
         // Track emitted symbols to avoid duplicates
-        let mut emitted_lines: std::collections::HashSet<(String, usize)> = std::collections::HashSet::new();
+        let mut emitted_lines: std::collections::HashSet<(String, usize)> =
+            std::collections::HashSet::new();
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 
@@ -498,9 +539,8 @@ impl LanguageParser for TypeScriptParser {
                     let decl_node = name_cap.node.parent(); // variable_declarator
                     let lex_node = decl_node.and_then(|n| n.parent()); // lexical_declaration
                     let parent_node = lex_node.and_then(|n| n.parent()); // should be program
-                    let is_module_level = parent_node
-                        .map(|n| n.kind() == "program")
-                        .unwrap_or(false);
+                    let is_module_level =
+                        parent_node.map(|n| n.kind() == "program").unwrap_or(false);
 
                     if is_module_level {
                         symbols.push(ParsedSymbol {
@@ -633,25 +673,65 @@ impl LanguageParser for TypeScriptParser {
 
             // === Class methods ===
 
-            if emit_class_member(content, m, idx_method_name, idx_method_node, SymbolKind::Function, &mut symbols, &mut emitted_lines) {
+            if emit_class_member(
+                content,
+                m,
+                idx_method_name,
+                idx_method_node,
+                SymbolKind::Function,
+                &mut symbols,
+                &mut emitted_lines,
+            ) {
                 continue;
             }
-            if emit_class_member(content, m, idx_private_method_name, idx_private_method_node, SymbolKind::Function, &mut symbols, &mut emitted_lines) {
+            if emit_class_member(
+                content,
+                m,
+                idx_private_method_name,
+                idx_private_method_node,
+                SymbolKind::Function,
+                &mut symbols,
+                &mut emitted_lines,
+            ) {
                 continue;
             }
 
             // === Class fields/properties ===
 
-            if emit_class_member(content, m, idx_field_name, idx_field_node, SymbolKind::Property, &mut symbols, &mut emitted_lines) {
+            if emit_class_member(
+                content,
+                m,
+                idx_field_name,
+                idx_field_node,
+                SymbolKind::Property,
+                &mut symbols,
+                &mut emitted_lines,
+            ) {
                 continue;
             }
-            if emit_class_member(content, m, idx_private_field_name, idx_private_field_node, SymbolKind::Property, &mut symbols, &mut emitted_lines) {
+            if emit_class_member(
+                content,
+                m,
+                idx_private_field_name,
+                idx_private_field_node,
+                SymbolKind::Property,
+                &mut symbols,
+                &mut emitted_lines,
+            ) {
                 continue;
             }
 
             // === Abstract methods ===
 
-            if emit_class_member(content, m, idx_abstract_method_name, idx_abstract_method_node, SymbolKind::Function, &mut symbols, &mut emitted_lines) {
+            if emit_class_member(
+                content,
+                m,
+                idx_abstract_method_name,
+                idx_abstract_method_node,
+                SymbolKind::Function,
+                &mut symbols,
+                &mut emitted_lines,
+            ) {
                 continue;
             }
         }
@@ -728,81 +808,165 @@ mod tests {
     fn test_parse_class() {
         let content = "export class UserService extends BaseService implements IUserService {\n}\n\nclass ChildClass extends ParentClass {\n}\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "UserService" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s| s.name == "ChildClass" && s.parents.iter().any(|(p, _)| p == "ParentClass")));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "UserService" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols.iter().any(
+                |s| s.name == "ChildClass" && s.parents.iter().any(|(p, _)| p == "ParentClass")
+            )
+        );
     }
 
     #[test]
     fn test_parse_interface() {
         let content = "interface User {\n    id: string;\n}\n\nexport interface IUserService extends IService {\n}\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "User" && s.kind == SymbolKind::Interface));
-        assert!(symbols.iter().any(|s| s.name == "IUserService" && s.kind == SymbolKind::Interface));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "User" && s.kind == SymbolKind::Interface)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "IUserService" && s.kind == SymbolKind::Interface)
+        );
     }
 
     #[test]
     fn test_parse_type_alias() {
         let content = "type UserId = string;\nexport type UserMap = Map<string, User>;\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "UserId" && s.kind == SymbolKind::TypeAlias));
-        assert!(symbols.iter().any(|s| s.name == "UserMap" && s.kind == SymbolKind::TypeAlias));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "UserId" && s.kind == SymbolKind::TypeAlias)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "UserMap" && s.kind == SymbolKind::TypeAlias)
+        );
     }
 
     #[test]
     fn test_parse_enum() {
         let content = "enum Status {\n    Active,\n    Inactive,\n}\n\nexport const enum Direction {\n    Up,\n    Down,\n}\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Status" && s.kind == SymbolKind::Enum));
-        assert!(symbols.iter().any(|s| s.name == "Direction" && s.kind == SymbolKind::Enum));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Status" && s.kind == SymbolKind::Enum)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Direction" && s.kind == SymbolKind::Enum)
+        );
     }
 
     #[test]
     fn test_parse_functions() {
         let content = "function handleRequest(req: Request): Response {\n    return new Response();\n}\n\nexport async function fetchUser(id: string): Promise<User> {\n    return fetch(`/users/${id}`);\n}\n\nconst processData = (data: Data) => {\n    return data;\n};\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "handleRequest" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "fetchUser" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "processData" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "handleRequest" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "fetchUser" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "processData" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
     fn test_parse_react_component() {
         let content = "const Button: React.FC<ButtonProps> = ({ children, onClick }) => {\n    return <button onClick={onClick}>{children}</button>;\n};\n\nexport function UserCard({ user }: UserCardProps) {\n    return <div>{user.name}</div>;\n}\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Button" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s| s.name == "UserCard" && s.kind == SymbolKind::Class));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Button" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "UserCard" && s.kind == SymbolKind::Class)
+        );
     }
 
     #[test]
     fn test_parse_react_hooks() {
         let content = "function useAuth() {\n    const [user, setUser] = useState(null);\n    return { user };\n}\n\nexport const useCounter = () => {\n    return { count: 0 };\n};\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "useAuth" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "useCounter" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "useAuth" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "useCounter" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
     fn test_parse_constants() {
         let content = "const API_URL = 'https://api.example.com';\nexport const MAX_RETRIES = 3;\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "API_URL" && s.kind == SymbolKind::Constant));
-        assert!(symbols.iter().any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Constant));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "API_URL" && s.kind == SymbolKind::Constant)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Constant)
+        );
     }
 
     #[test]
     fn test_parse_namespace() {
         let content = "namespace Utils {\n    export function helper() {}\n}\n\nexport namespace Types {\n    export interface User {}\n}\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Utils" && s.kind == SymbolKind::Package));
-        assert!(symbols.iter().any(|s| s.name == "Types" && s.kind == SymbolKind::Package));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Utils" && s.kind == SymbolKind::Package)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Types" && s.kind == SymbolKind::Package)
+        );
     }
 
     #[test]
     fn test_parse_decorators() {
         let content = "@Controller('users')\nexport class UserController {\n    @Get(':id')\n    getUser(@Param('id') id: string) {}\n}\n";
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "@Controller" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "@Get" && s.kind == SymbolKind::Annotation));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "@Controller" && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "@Get" && s.kind == SymbolKind::Annotation)
+        );
     }
 
     #[test]
@@ -829,10 +993,26 @@ export class UserService {
 }
 "#;
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "UserService" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s| s.name == "constructor" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "getUser" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "validate" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "UserService" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "constructor" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "getUser" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "validate" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -845,8 +1025,16 @@ class Config {
 }
 "#;
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "value" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "create" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "value" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "create" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -859,9 +1047,21 @@ class User {
 }
 "#;
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "name" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "age" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "count" && s.kind == SymbolKind::Property));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "name" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "age" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "count" && s.kind == SymbolKind::Property)
+        );
     }
 
     #[test]
@@ -873,7 +1073,11 @@ abstract class Base {
 }
 "#;
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "process" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "process" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -885,8 +1089,16 @@ const obj = {
 };
 "#;
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(!symbols.iter().any(|s| s.name == "method" && s.kind == SymbolKind::Function));
-        assert!(!symbols.iter().any(|s| s.name == "prop" && s.kind == SymbolKind::Function));
+        assert!(
+            !symbols
+                .iter()
+                .any(|s| s.name == "method" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            !symbols
+                .iter()
+                .any(|s| s.name == "prop" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -912,21 +1124,57 @@ declare function internalHelper(): void;
 "#;
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
         // declare function
-        assert!(symbols.iter().any(|s| s.name == "useToaster" && s.kind == SymbolKind::Function),
-            "useToaster not found; symbols: {:?}", symbols.iter().map(|s| (&s.name, &s.kind)).collect::<Vec<_>>());
-        assert!(symbols.iter().any(|s| s.name == "internalHelper" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "useToaster" && s.kind == SymbolKind::Function),
+            "useToaster not found; symbols: {:?}",
+            symbols
+                .iter()
+                .map(|s| (&s.name, &s.kind))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "internalHelper" && s.kind == SymbolKind::Function)
+        );
         // declare class
-        assert!(symbols.iter().any(|s| s.name == "Theme" && s.kind == SymbolKind::Class));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Theme" && s.kind == SymbolKind::Class)
+        );
         // declare interface
-        assert!(symbols.iter().any(|s| s.name == "ThemeProps" && s.kind == SymbolKind::Interface));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "ThemeProps" && s.kind == SymbolKind::Interface)
+        );
         // declare type
-        assert!(symbols.iter().any(|s| s.name == "ThemeColor" && s.kind == SymbolKind::TypeAlias));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "ThemeColor" && s.kind == SymbolKind::TypeAlias)
+        );
         // declare enum
-        assert!(symbols.iter().any(|s| s.name == "Direction" && s.kind == SymbolKind::Enum));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Direction" && s.kind == SymbolKind::Enum)
+        );
         // declare const (ALL_CAPS)
-        assert!(symbols.iter().any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Constant));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Constant)
+        );
         // declare namespace
-        assert!(symbols.iter().any(|s| s.name == "Utils" && s.kind == SymbolKind::Package));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Utils" && s.kind == SymbolKind::Package)
+        );
     }
 
     #[test]
@@ -938,7 +1186,15 @@ class Foo {
 }
 "#;
         let symbols = TYPESCRIPT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "#secret" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "#process" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "#secret" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "#process" && s.kind == SymbolKind::Function)
+        );
     }
 }

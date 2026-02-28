@@ -13,7 +13,7 @@ use std::time::Instant;
 use anyhow::Result;
 use colored::Colorize;
 use regex::Regex;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use walkdir::WalkDir;
 
 use crate::db;
@@ -70,7 +70,8 @@ pub fn cmd_deps(root: &Path, module: &str) -> Result<()> {
     let conn = db::open_db(root)?;
 
     // Check if module deps are indexed
-    let dep_count: i64 = conn.query_row("SELECT COUNT(*) FROM module_deps", [], |row| row.get(0))?;
+    let dep_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM module_deps", [], |row| row.get(0))?;
 
     if dep_count == 0 {
         println!(
@@ -89,8 +90,14 @@ pub fn cmd_deps(root: &Path, module: &str) -> Result<()> {
 
     // Group by kind
     let api_deps: Vec<_> = deps.iter().filter(|(_, _, k)| k == "api").collect();
-    let impl_deps: Vec<_> = deps.iter().filter(|(_, _, k)| k == "implementation").collect();
-    let other_deps: Vec<_> = deps.iter().filter(|(_, _, k)| k != "api" && k != "implementation").collect();
+    let impl_deps: Vec<_> = deps
+        .iter()
+        .filter(|(_, _, k)| k == "implementation")
+        .collect();
+    let other_deps: Vec<_> = deps
+        .iter()
+        .filter(|(_, _, k)| k != "api" && k != "implementation")
+        .collect();
 
     if !api_deps.is_empty() {
         println!("  {}:", "api".cyan());
@@ -136,7 +143,8 @@ pub fn cmd_dependents(root: &Path, module: &str) -> Result<()> {
     let conn = db::open_db(root)?;
 
     // Check if module deps are indexed
-    let dep_count: i64 = conn.query_row("SELECT COUNT(*) FROM module_deps", [], |row| row.get(0))?;
+    let dep_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM module_deps", [], |row| row.get(0))?;
 
     if dep_count == 0 {
         println!(
@@ -155,8 +163,14 @@ pub fn cmd_dependents(root: &Path, module: &str) -> Result<()> {
 
     // Group by kind
     let api_deps: Vec<_> = dependents.iter().filter(|(_, _, k)| k == "api").collect();
-    let impl_deps: Vec<_> = dependents.iter().filter(|(_, _, k)| k == "implementation").collect();
-    let other_deps: Vec<_> = dependents.iter().filter(|(_, _, k)| k != "api" && k != "implementation").collect();
+    let impl_deps: Vec<_> = dependents
+        .iter()
+        .filter(|(_, _, k)| k == "implementation")
+        .collect();
+    let other_deps: Vec<_> = dependents
+        .iter()
+        .filter(|(_, _, k)| k != "api" && k != "implementation")
+        .collect();
 
     if !api_deps.is_empty() {
         println!("  {} ({}):", "via api".cyan(), api_deps.len());
@@ -199,30 +213,42 @@ pub fn cmd_unused_deps(
     let start = Instant::now();
 
     if !db::db_exists(root) {
-        println!("{}", "Index not found. Run 'ast-index rebuild' first.".red());
+        println!(
+            "{}",
+            "Index not found. Run 'ast-index rebuild' first.".red()
+        );
         return Ok(());
     }
 
     let conn = db::open_db(root)?;
 
     // Check if module deps are indexed
-    let dep_count: i64 = conn.query_row("SELECT COUNT(*) FROM module_deps", [], |row| row.get(0))?;
+    let dep_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM module_deps", [], |row| row.get(0))?;
     if dep_count == 0 {
-        println!("{}", "Module dependencies not indexed. Run 'ast-index rebuild' first.".yellow());
+        println!(
+            "{}",
+            "Module dependencies not indexed. Run 'ast-index rebuild' first.".yellow()
+        );
         return Ok(());
     }
 
     // Get module id and path
-    let module_info: Option<(i64, String)> = conn.query_row(
-        "SELECT id, path FROM modules WHERE name = ?1",
-        params![module],
-        |row| Ok((row.get(0)?, row.get(1)?))
-    ).ok();
+    let module_info: Option<(i64, String)> = conn
+        .query_row(
+            "SELECT id, path FROM modules WHERE name = ?1",
+            params![module],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok();
 
     let (module_id, module_path) = match module_info {
         Some((id, p)) => (id, p),
         None => {
-            println!("{}", format!("Module '{}' not found in index.", module).red());
+            println!(
+                "{}",
+                format!("Module '{}' not found in index.", module).red()
+            );
             return Ok(());
         }
     };
@@ -231,17 +257,34 @@ pub fn cmd_unused_deps(
     let deps = indexer::get_module_deps(&conn, module)?;
 
     if deps.is_empty() {
-        println!("{}", format!("Module '{}' has no dependencies.", module).yellow());
+        println!(
+            "{}",
+            format!("Module '{}' has no dependencies.", module).yellow()
+        );
         return Ok(());
     }
 
-    println!("{}", format!("Analyzing {} dependencies of '{}'...", deps.len(), module).bold());
+    println!(
+        "{}",
+        format!("Analyzing {} dependencies of '{}'...", deps.len(), module).bold()
+    );
     if check_transitive || check_xml || check_resources {
         let checks: Vec<&str> = [
-            if check_transitive { Some("transitive") } else { None },
+            if check_transitive {
+                Some("transitive")
+            } else {
+                None
+            },
             if check_xml { Some("XML") } else { None },
-            if check_resources { Some("resources") } else { None },
-        ].into_iter().flatten().collect();
+            if check_resources {
+                Some("resources")
+            } else {
+                None
+            },
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
         println!("  Checking: direct imports + {}\n", checks.join(", "));
     } else {
         println!("  Checking: direct imports only (strict mode)\n");
@@ -273,34 +316,41 @@ pub fn cmd_unused_deps(
 
         // 1. Check direct usage via index (refs table)
         let dep_symbols = get_module_public_symbols(&conn, root, dep_path)?;
-        let (direct_count, direct_names) = count_symbols_used_in_module(&conn, &dep_symbols, &module_path)?;
+        let (direct_count, direct_names) =
+            count_symbols_used_in_module(&conn, &dep_symbols, &module_path)?;
         usage.direct_count = direct_count;
         usage.direct_symbols = direct_names;
 
         // 2. Check transitive usage (via api dependency chain in transitive_deps table)
         if check_transitive && usage.direct_count == 0 {
-            let trans_count: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM transitive_deps td
+            let trans_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM transitive_deps td
                  JOIN modules m ON td.dependency_id = m.id
                  WHERE td.module_id = ?1 AND m.name = ?2 AND td.depth > 1",
-                params![module_id, dep_name],
-                |row| row.get(0),
-            ).unwrap_or(0);
+                    params![module_id, dep_name],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
 
             if trans_count > 0 {
-                let path: String = conn.query_row(
-                    "SELECT td.path FROM transitive_deps td
+                let path: String = conn
+                    .query_row(
+                        "SELECT td.path FROM transitive_deps td
                      JOIN modules m ON td.dependency_id = m.id
                      WHERE td.module_id = ?1 AND m.name = ?2 AND td.depth > 1
                      ORDER BY td.depth LIMIT 1",
-                    params![module_id, dep_name],
-                    |row| row.get(0),
-                ).unwrap_or_default();
+                        params![module_id, dep_name],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or_default();
 
                 usage.transitive_count = 1;
                 let parts: Vec<&str> = path.split(" -> ").collect();
                 if parts.len() >= 2 {
-                    usage.transitive_via.push((parts[1].to_string(), vec!["(api chain)".to_string()]));
+                    usage
+                        .transitive_via
+                        .push((parts[1].to_string(), vec!["(api chain)".to_string()]));
                 }
             }
         }
@@ -312,7 +362,7 @@ pub fn cmd_unused_deps(
                 "SELECT DISTINCT s.name FROM symbols s
                  JOIN files f ON s.file_id = f.id
                  WHERE f.path LIKE ?1 AND s.kind IN ('class', 'object')
-                 LIMIT 50"
+                 LIMIT 50",
             )?;
             let dep_pattern = format!("{}%", dep_path);
             let classes: Vec<String> = class_stmt
@@ -325,11 +375,13 @@ pub fn cmd_unused_deps(
                 let mut xml_stmt = conn.prepare(
                     "SELECT x.file_path, x.line FROM xml_usages x
                      JOIN modules m ON x.module_id = m.id
-                     WHERE m.id = ?1 AND x.class_name LIKE ?2"
+                     WHERE m.id = ?1 AND x.class_name LIKE ?2",
                 )?;
                 let class_pattern = format!("%{}", class_name);
                 let xml_results: Vec<(String, i64)> = xml_stmt
-                    .query_map(params![module_id, class_pattern], |row| Ok((row.get(0)?, row.get(1)?)))?
+                    .query_map(params![module_id, class_pattern], |row| {
+                        Ok((row.get(0)?, row.get(1)?))
+                    })?
                     .filter_map(|r| r.ok())
                     .collect();
 
@@ -343,13 +395,17 @@ pub fn cmd_unused_deps(
         }
 
         // 4. Check resource usages
-        if check_resources && usage.direct_count == 0 && usage.transitive_count == 0 && usage.xml_count == 0 {
+        if check_resources
+            && usage.direct_count == 0
+            && usage.transitive_count == 0
+            && usage.xml_count == 0
+        {
             // Get resources defined in the dependency module
             let mut res_stmt = conn.prepare(
                 "SELECT r.type, r.name FROM resources r
                  JOIN modules m ON r.module_id = m.id
                  WHERE m.name = ?1
-                 LIMIT 100"
+                 LIMIT 100",
             )?;
             let resources: Vec<(String, String)> = res_stmt
                 .query_map(params![dep_name], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -362,11 +418,13 @@ pub fn cmd_unused_deps(
                     "SELECT ru.usage_type FROM resource_usages ru
                      JOIN resources r ON ru.resource_id = r.id
                      WHERE r.type = ?1 AND r.name = ?2
-                     AND ru.usage_file LIKE ?3"
+                     AND ru.usage_file LIKE ?3",
                 )?;
                 let module_pattern = format!("{}%", module_path);
                 let usages: Vec<String> = usage_stmt
-                    .query_map(params![res_type, res_name, module_pattern], |row| row.get(0))?
+                    .query_map(params![res_type, res_name, module_pattern], |row| {
+                        row.get(0)
+                    })?
                     .filter_map(|r| r.ok())
                     .collect();
 
@@ -375,7 +433,7 @@ pub fn cmd_unused_deps(
                     if usage.resource_usages.len() < 3 {
                         usage.resource_usages.push((
                             format!("@{}/{}", res_type, res_name),
-                            usages.first().cloned().unwrap_or_default()
+                            usages.first().cloned().unwrap_or_default(),
                         ));
                     }
                 }
@@ -383,7 +441,8 @@ pub fn cmd_unused_deps(
         }
 
         // Categorize the dependency
-        let total_usage = usage.direct_count + usage.transitive_count + usage.xml_count + usage.resource_count;
+        let total_usage =
+            usage.direct_count + usage.transitive_count + usage.xml_count + usage.resource_count;
 
         if total_usage == 0 {
             // Check if this is an api dependency (exported for consumers)
@@ -393,13 +452,33 @@ pub fn cmd_unused_deps(
                 unused.push((dep_name.clone(), dep_path.clone(), dep_kind.clone()));
             }
         } else if usage.direct_count > 0 {
-            used_direct.push((dep_name.clone(), dep_path.clone(), dep_kind.clone(), usage.direct_count));
+            used_direct.push((
+                dep_name.clone(),
+                dep_path.clone(),
+                dep_kind.clone(),
+                usage.direct_count,
+            ));
         } else if usage.transitive_count > 0 {
-            used_transitive.push((dep_name.clone(), dep_path.clone(), dep_kind.clone(), usage.transitive_count));
+            used_transitive.push((
+                dep_name.clone(),
+                dep_path.clone(),
+                dep_kind.clone(),
+                usage.transitive_count,
+            ));
         } else if usage.xml_count > 0 {
-            used_xml.push((dep_name.clone(), dep_path.clone(), dep_kind.clone(), usage.xml_count));
+            used_xml.push((
+                dep_name.clone(),
+                dep_path.clone(),
+                dep_kind.clone(),
+                usage.xml_count,
+            ));
         } else if usage.resource_count > 0 {
-            used_resources.push((dep_name.clone(), dep_path.clone(), dep_kind.clone(), usage.resource_count));
+            used_resources.push((
+                dep_name.clone(),
+                dep_path.clone(),
+                dep_kind.clone(),
+                usage.resource_count,
+            ));
         }
 
         dep_usages.insert(dep_name.clone(), usage);
@@ -415,7 +494,13 @@ pub fn cmd_unused_deps(
             } else {
                 format!(": {}", usage.direct_symbols.join(", "))
             };
-            println!("  {} {} - {} symbols{}", "✓".green(), name, count, symbols_str);
+            println!(
+                "  {} {} - {} symbols{}",
+                "✓".green(),
+                name,
+                count,
+                symbols_str
+            );
         }
         if used_direct.is_empty() {
             println!("  (none)");
@@ -466,7 +551,10 @@ pub fn cmd_unused_deps(
 
     // Exported (api deps not directly used but intentionally re-exported)
     if !exported.is_empty() {
-        println!("\n{}", "=== Exported (not directly used) ===".yellow().bold());
+        println!(
+            "\n{}",
+            "=== Exported (not directly used) ===".yellow().bold()
+        );
         for (name, _path, _kind) in &exported {
             println!("  {} {} (api)", "⚡".yellow(), name);
             if verbose {
@@ -476,7 +564,7 @@ pub fn cmd_unused_deps(
                      JOIN modules m ON md.module_id = m.id
                      JOIN modules dep ON md.dep_module_id = dep.id
                      WHERE dep.name = ?1 AND m.name != ?2
-                     LIMIT 5"
+                     LIMIT 5",
                 )?;
                 let consumers: Vec<String> = stmt
                     .query_map(params![name, module], |row| row.get(0))?
@@ -496,9 +584,15 @@ pub fn cmd_unused_deps(
             println!("  {} {} ({})", "✗".red(), name, kind);
             if verbose {
                 println!("    - No direct imports");
-                if check_transitive { println!("    - No transitive usage"); }
-                if check_xml { println!("    - No XML usage"); }
-                if check_resources { println!("    - No resource usage"); }
+                if check_transitive {
+                    println!("    - No transitive usage");
+                }
+                if check_xml {
+                    println!("    - No XML usage");
+                }
+                if check_resources {
+                    println!("    - No resource usage");
+                }
             }
         }
     } else {
@@ -506,7 +600,8 @@ pub fn cmd_unused_deps(
     }
 
     println!("\n{}", "=== Summary ===".bold());
-    let total_used = used_direct.len() + used_transitive.len() + used_xml.len() + used_resources.len();
+    let total_used =
+        used_direct.len() + used_transitive.len() + used_xml.len() + used_resources.len();
     println!(
         "Total: {} unused, {} exported, {} used of {} dependencies",
         unused.len(),
@@ -533,7 +628,11 @@ pub fn cmd_unused_deps(
 }
 
 /// Get public symbols (classes, interfaces) from a module
-fn get_module_public_symbols(conn: &Connection, root: &Path, module_path: &str) -> Result<Vec<String>> {
+fn get_module_public_symbols(
+    conn: &Connection,
+    root: &Path,
+    module_path: &str,
+) -> Result<Vec<String>> {
     let mut symbols = vec![];
 
     // First try to get from index
@@ -541,29 +640,30 @@ fn get_module_public_symbols(conn: &Connection, root: &Path, module_path: &str) 
         "SELECT DISTINCT s.name FROM symbols s
          JOIN files f ON s.file_id = f.id
          WHERE f.path LIKE ?1 AND s.kind IN ('class', 'interface', 'object')
-         LIMIT 100"
+         LIMIT 100",
     )?;
 
     let pattern = format!("{}%", module_path);
     let rows = stmt.query_map(params![pattern], |row| row.get::<_, String>(0))?;
 
-    for row in rows {
-        if let Ok(name) = row {
-            symbols.push(name);
-        }
+    for name in rows.flatten() {
+        symbols.push(name);
     }
 
     // If no symbols in index, try to find by scanning files
     if symbols.is_empty() {
         let module_dir = root.join(module_path);
         if module_dir.exists() {
-            let class_re = Regex::new(r"(?m)^\s*(?:public\s+)?(?:abstract\s+)?(?:data\s+)?(?:class|interface|object)\s+(\w+)")?;
+            let class_re = Regex::new(
+                r"(?m)^\s*(?:public\s+)?(?:abstract\s+)?(?:data\s+)?(?:class|interface|object)\s+(\w+)",
+            )?;
 
             for entry in WalkDir::new(&module_dir)
                 .into_iter()
                 .filter_map(|e| e.ok())
                 .filter(|e| {
-                    e.path().extension()
+                    e.path()
+                        .extension()
                         .map(|ext| ext == "kt" || ext == "java")
                         .unwrap_or(false)
                 })
@@ -600,11 +700,12 @@ fn count_symbols_used_in_module(
     let mut stmt = conn.prepare_cached(
         "SELECT COUNT(*) FROM refs r
          JOIN files f ON r.file_id = f.id
-         WHERE r.name = ?1 AND f.path LIKE ?2"
+         WHERE r.name = ?1 AND f.path LIKE ?2",
     )?;
 
     for symbol in dep_symbols {
-        let count: i64 = stmt.query_row(params![symbol, &module_pattern], |row| row.get(0))
+        let count: i64 = stmt
+            .query_row(params![symbol, &module_pattern], |row| row.get(0))
             .unwrap_or(0);
         if count > 0 {
             used_count += 1;

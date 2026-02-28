@@ -1,12 +1,12 @@
 //! Tree-sitter based Swift parser
 
 use anyhow::Result;
-use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 use std::sync::LazyLock;
+use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
+use super::{LanguageParser, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
-use super::{LanguageParser, parse_tree, node_text, node_line, line_text};
 
 static SWIFT_LANGUAGE: LazyLock<Language> = LazyLock::new(|| tree_sitter_swift::LANGUAGE.into());
 
@@ -29,7 +29,10 @@ impl LanguageParser for SwiftParser {
         // Build capture name -> index map
         let capture_names = query.capture_names();
         let idx = |name: &str| -> Option<u32> {
-            capture_names.iter().position(|n| *n == name).map(|i| i as u32)
+            capture_names
+                .iter()
+                .position(|n| *n == name)
+                .map(|i| i as u32)
         };
 
         let idx_decl_kind = idx("decl_kind");
@@ -206,7 +209,11 @@ fn collect_parents_from_node(node: &tree_sitter::Node, content: &str) -> Vec<(St
         if child.kind() == "inheritance_specifier" {
             // Find the type_identifier inside user_type
             if let Some(type_name) = find_type_identifier_in(&child, content) {
-                let kind = if parents.is_empty() { "extends" } else { "implements" };
+                let kind = if parents.is_empty() {
+                    "extends"
+                } else {
+                    "implements"
+                };
                 parents.push((type_name, kind.to_string()));
             }
         }
@@ -260,8 +267,16 @@ mod tests {
         let symbols = SWIFT_PARSER.parse_symbols(content).unwrap();
         let cls = symbols.iter().find(|s| s.name == "AppDelegate").unwrap();
         assert_eq!(cls.kind, SymbolKind::Class);
-        assert!(cls.parents.iter().any(|(p, k)| p == "UIResponder" && k == "extends"));
-        assert!(cls.parents.iter().any(|(p, k)| p == "UIApplicationDelegate" && k == "implements"));
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "UIResponder" && k == "extends")
+        );
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "UIApplicationDelegate" && k == "implements")
+        );
     }
 
     #[test]
@@ -300,11 +315,19 @@ mod tests {
 
     #[test]
     fn test_parse_extension() {
-        let content = "extension String: CustomProtocol {\n    func trimmed() -> String { self }\n}\n";
+        let content =
+            "extension String: CustomProtocol {\n    func trimmed() -> String { self }\n}\n";
         let symbols = SWIFT_PARSER.parse_symbols(content).unwrap();
-        let ext = symbols.iter().find(|s| s.name == "String+Extension").unwrap();
+        let ext = symbols
+            .iter()
+            .find(|s| s.name == "String+Extension")
+            .unwrap();
         assert_eq!(ext.kind, SymbolKind::Object);
-        assert!(ext.parents.iter().any(|(p, k)| p == "String" && k == "extends"));
+        assert!(
+            ext.parents
+                .iter()
+                .any(|(p, k)| p == "String" && k == "extends")
+        );
     }
 
     #[test]
@@ -317,18 +340,35 @@ mod tests {
 
     #[test]
     fn test_parse_init() {
-        let content = "class Foo {\n    public init(name: String) {\n        self.name = name\n    }\n}\n";
+        let content =
+            "class Foo {\n    public init(name: String) {\n        self.name = name\n    }\n}\n";
         let symbols = SWIFT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "init" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "init" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
     fn test_parse_property() {
         let content = "class Foo {\n    var name: String = \"\"\n    let count: Int = 0\n    static var shared: Foo = Foo()\n}\n";
         let symbols = SWIFT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "name" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "count" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "shared" && s.kind == SymbolKind::Property));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "name" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "count" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "shared" && s.kind == SymbolKind::Property)
+        );
     }
 
     #[test]
@@ -343,7 +383,11 @@ mod tests {
     fn test_parse_nested_function() {
         let content = "class ViewController {\n    func loadData() async throws -> Data {\n        fatalError()\n    }\n}\n";
         let symbols = SWIFT_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "loadData" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "loadData" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -393,16 +437,60 @@ typealias Completion = (Result<Data, Error>) -> Void
         let symbols = SWIFT_PARSER.parse_symbols(content).unwrap();
 
         // Check that all major declarations are found
-        assert!(symbols.iter().any(|s| s.name == "ViewController" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s| s.name == "User" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s| s.name == "Direction" && s.kind == SymbolKind::Enum));
-        assert!(symbols.iter().any(|s| s.name == "Fetchable" && s.kind == SymbolKind::Interface));
-        assert!(symbols.iter().any(|s| s.name == "DataStore" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s| s.name == "String+Extension" && s.kind == SymbolKind::Object));
-        assert!(symbols.iter().any(|s| s.name == "Completion" && s.kind == SymbolKind::TypeAlias));
-        assert!(symbols.iter().any(|s| s.name == "loadData" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "init" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "name" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "count" && s.kind == SymbolKind::Property));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "ViewController" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "User" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Direction" && s.kind == SymbolKind::Enum)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Fetchable" && s.kind == SymbolKind::Interface)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "DataStore" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "String+Extension" && s.kind == SymbolKind::Object)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Completion" && s.kind == SymbolKind::TypeAlias)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "loadData" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "init" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "name" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "count" && s.kind == SymbolKind::Property)
+        );
     }
 }

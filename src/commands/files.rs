@@ -16,26 +16,35 @@ use regex::Regex;
 
 use crate::db::SymbolKind;
 
+use super::{relative_path, search_files};
 use crate::db;
-use super::{search_files, relative_path};
 
 /// Outline helper: parse file with tree-sitter and print symbols, skipping specified kinds.
 /// Returns true if any symbols were printed.
-fn outline_via_treesitter(content: &str, file_type: crate::parsers::FileType, skip_kinds: &[SymbolKind]) -> Result<bool> {
+fn outline_via_treesitter(
+    content: &str,
+    file_type: crate::parsers::FileType,
+    skip_kinds: &[SymbolKind],
+) -> Result<bool> {
     let (symbols, _refs) = crate::parsers::parse_file_symbols(content, file_type)?;
     let mut found = false;
     for sym in &symbols {
         if skip_kinds.contains(&sym.kind) {
             continue;
         }
-        println!("  {} {} [{}]", format!(":{}", sym.line).dimmed(), sym.name.cyan(), sym.kind.as_str());
+        println!(
+            "  {} {} [{}]",
+            format!(":{}", sym.line).dimmed(),
+            sym.name.cyan(),
+            sym.kind.as_str()
+        );
         found = true;
     }
     Ok(found)
 }
 
 /// Find files by pattern
-pub fn cmd_file(root: &Path, pattern: &str, exact: bool, limit: usize) -> Result<()> {
+pub fn cmd_file(root: &Path, pattern: &str, _exact: bool, limit: usize) -> Result<()> {
     let start = Instant::now();
 
     if !db::db_exists(root) {
@@ -48,7 +57,7 @@ pub fn cmd_file(root: &Path, pattern: &str, exact: bool, limit: usize) -> Result
 
     let conn = db::open_db(root)?;
 
-    let search_pattern = if exact { pattern.to_string() } else { pattern.to_string() };
+    let search_pattern = pattern.to_string();
     let files = db::find_files(&conn, &search_pattern, limit)?;
 
     println!("{}", format!("Files matching '{}':", pattern).bold());
@@ -106,7 +115,11 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
 
             if let Some(caps) = package_re.captures(line) {
                 let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [package]", format!(":{}", line_num).dimmed(), name.cyan());
+                println!(
+                    "  {} {} [package]",
+                    format!(":{}", line_num).dimmed(),
+                    name.cyan()
+                );
                 found = true;
             }
 
@@ -118,7 +131,11 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
 
             if let Some(caps) = constant_re.captures(line) {
                 let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [constant]", format!(":{}", line_num).dimmed(), name);
+                println!(
+                    "  {} {} [constant]",
+                    format!(":{}", line_num).dimmed(),
+                    name
+                );
                 found = true;
             }
 
@@ -138,15 +155,28 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
 
             if let Some(caps) = class_re.captures(line) {
                 let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [class]", format!(":{}", line_num).dimmed(), name.cyan());
+                println!(
+                    "  {} {} [class]",
+                    format!(":{}", line_num).dimmed(),
+                    name.cyan()
+                );
                 found = true;
             }
 
             if let Some(caps) = func_re.captures(line) {
                 let is_async = caps.get(1).is_some();
                 let name = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-                let kind = if is_async { "async function" } else { "function" };
-                println!("  {} {} [{}]", format!(":{}", line_num).dimmed(), name, kind);
+                let kind = if is_async {
+                    "async function"
+                } else {
+                    "function"
+                };
+                println!(
+                    "  {} {} [{}]",
+                    format!(":{}", line_num).dimmed(),
+                    name,
+                    kind
+                );
                 found = true;
             }
         }
@@ -162,19 +192,31 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
 
             if let Some(caps) = package_re.captures(line) {
                 let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [package]", format!(":{}", line_num).dimmed(), name.cyan());
+                println!(
+                    "  {} {} [package]",
+                    format!(":{}", line_num).dimmed(),
+                    name.cyan()
+                );
                 found = true;
             }
 
             if let Some(caps) = struct_re.captures(line) {
                 let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [struct]", format!(":{}", line_num).dimmed(), name.cyan());
+                println!(
+                    "  {} {} [struct]",
+                    format!(":{}", line_num).dimmed(),
+                    name.cyan()
+                );
                 found = true;
             }
 
             if let Some(caps) = interface_re.captures(line) {
                 let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [interface]", format!(":{}", line_num).dimmed(), name.cyan());
+                println!(
+                    "  {} {} [interface]",
+                    format!(":{}", line_num).dimmed(),
+                    name.cyan()
+                );
                 found = true;
             }
 
@@ -188,20 +230,30 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
         // C++ patterns
         let namespace_re = Regex::new(r"^namespace\s+([\w:]+)\s*\{")?;
         let class_re = Regex::new(r"^(?:class|struct)\s+([A-Z][a-zA-Z0-9_]*)")?;
-        let func_re = Regex::new(r"^(?:[\w:]+(?:<[^>]*>)?\s*[*&]?\s+)?([A-Z][a-zA-Z0-9_]*::)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:const)?\s*(?:override)?\s*\{")?;
+        let func_re = Regex::new(
+            r"^(?:[\w:]+(?:<[^>]*>)?\s*[*&]?\s+)?([A-Z][a-zA-Z0-9_]*::)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:const)?\s*(?:override)?\s*\{",
+        )?;
 
         for (line_num, line) in content.lines().enumerate() {
             let line_num = line_num + 1;
 
             if let Some(caps) = namespace_re.captures(line) {
                 let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [namespace]", format!(":{}", line_num).dimmed(), name.cyan());
+                println!(
+                    "  {} {} [namespace]",
+                    format!(":{}", line_num).dimmed(),
+                    name.cyan()
+                );
                 found = true;
             }
 
             if let Some(caps) = class_re.captures(line) {
                 let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [class]", format!(":{}", line_num).dimmed(), name.cyan());
+                println!(
+                    "  {} {} [class]",
+                    format!(":{}", line_num).dimmed(),
+                    name.cyan()
+                );
                 found = true;
             }
 
@@ -209,41 +261,76 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
                 let class_prefix = caps.get(1).map(|m| m.as_str()).unwrap_or("");
                 let name = caps.get(2).map(|m| m.as_str()).unwrap_or("");
                 if !class_prefix.is_empty() {
-                    println!("  {} {}::{} [method]", format!(":{}", line_num).dimmed(), class_prefix.trim_end_matches("::"), name);
+                    println!(
+                        "  {} {}::{} [method]",
+                        format!(":{}", line_num).dimmed(),
+                        class_prefix.trim_end_matches("::"),
+                        name
+                    );
                 } else {
-                    println!("  {} {} [function]", format!(":{}", line_num).dimmed(), name);
+                    println!(
+                        "  {} {} [function]",
+                        format!(":{}", line_num).dimmed(),
+                        name
+                    );
                 }
                 found = true;
             }
         }
     } else if ext == "dart" {
         // Dart — delegate to tree-sitter parser for correct results
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Dart, &[SymbolKind::Import, SymbolKind::Property])?;
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Dart, &[
+            SymbolKind::Import,
+            SymbolKind::Property,
+        ])?;
     } else if ext == "java" {
         // Java — delegate to tree-sitter
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Java, &[SymbolKind::Import, SymbolKind::Annotation])?;
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Java, &[
+            SymbolKind::Import,
+            SymbolKind::Annotation,
+        ])?;
     } else if ext == "ts" || ext == "tsx" || ext == "js" || ext == "jsx" {
         // TypeScript/JavaScript — delegate to tree-sitter
-        found = outline_via_treesitter(&content, crate::parsers::FileType::TypeScript, &[SymbolKind::Import])?;
+        found = outline_via_treesitter(&content, crate::parsers::FileType::TypeScript, &[
+            SymbolKind::Import,
+        ])?;
     } else if ext == "swift" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Swift, &[SymbolKind::Import])?;
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Swift, &[
+            SymbolKind::Import,
+        ])?;
     } else if ext == "rb" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Ruby, &[SymbolKind::Import])?;
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Ruby, &[
+            SymbolKind::Import,
+        ])?;
     } else if ext == "rs" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Rust, &[SymbolKind::Import])?;
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Rust, &[
+            SymbolKind::Import,
+        ])?;
     } else if ext == "scala" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::Scala, &[SymbolKind::Import])?;
+        found = outline_via_treesitter(&content, crate::parsers::FileType::Scala, &[
+            SymbolKind::Import,
+        ])?;
     } else if ext == "cs" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::CSharp, &[SymbolKind::Import])?;
+        found = outline_via_treesitter(&content, crate::parsers::FileType::CSharp, &[
+            SymbolKind::Import,
+        ])?;
     } else if ext == "proto" {
         found = outline_via_treesitter(&content, crate::parsers::FileType::Proto, &[])?;
     } else if ext == "m" || ext == "mm" {
-        found = outline_via_treesitter(&content, crate::parsers::FileType::ObjC, &[SymbolKind::Import])?;
+        found = outline_via_treesitter(&content, crate::parsers::FileType::ObjC, &[
+            SymbolKind::Import,
+        ])?;
     } else {
         // Kotlin (default fallback — existing regex logic)
-        let class_re = Regex::new(r"(?m)^\s*((?:public|private|protected|internal|abstract|open|final|sealed|data)?\s*)(class|interface|object|enum\s+class)\s+(\w+)")?;
-        let fun_re = Regex::new(r"(?m)^\s*((?:public|private|protected|internal|override|suspend)?\s*)fun\s+(?:<[^>]*>\s*)?(\w+)")?;
-        let prop_re = Regex::new(r"(?m)^\s*((?:public|private|protected|internal|override|const|lateinit)?\s*)(val|var)\s+(\w+)")?;
+        let class_re = Regex::new(
+            r"(?m)^\s*((?:public|private|protected|internal|abstract|open|final|sealed|data)?\s*)(class|interface|object|enum\s+class)\s+(\w+)",
+        )?;
+        let fun_re = Regex::new(
+            r"(?m)^\s*((?:public|private|protected|internal|override|suspend)?\s*)fun\s+(?:<[^>]*>\s*)?(\w+)",
+        )?;
+        let prop_re = Regex::new(
+            r"(?m)^\s*((?:public|private|protected|internal|override|const|lateinit)?\s*)(val|var)\s+(\w+)",
+        )?;
 
         for (line_num, line) in content.lines().enumerate() {
             let line_num = line_num + 1;
@@ -251,13 +338,22 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
             if let Some(caps) = class_re.captures(line) {
                 let kind = caps.get(2).map(|m| m.as_str()).unwrap_or("");
                 let name = caps.get(3).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [{}]", format!(":{}", line_num).dimmed(), name.cyan(), kind);
+                println!(
+                    "  {} {} [{}]",
+                    format!(":{}", line_num).dimmed(),
+                    name.cyan(),
+                    kind
+                );
                 found = true;
             }
 
             if let Some(caps) = fun_re.captures(line) {
                 let name = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-                println!("  {} {} [function]", format!(":{}", line_num).dimmed(), name);
+                println!(
+                    "  {} {} [function]",
+                    format!(":{}", line_num).dimmed(),
+                    name
+                );
                 found = true;
             }
 
@@ -265,7 +361,12 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
                 let kind = caps.get(2).map(|m| m.as_str()).unwrap_or("val");
                 let name = caps.get(3).map(|m| m.as_str()).unwrap_or("");
                 if !name.is_empty() && name != "val" && name != "var" {
-                    println!("  {} {} [{}]", format!(":{}", line_num).dimmed(), name, kind);
+                    println!(
+                        "  {} {} [{}]",
+                        format!(":{}", line_num).dimmed(),
+                        name,
+                        kind
+                    );
                     found = true;
                 }
             }
@@ -316,9 +417,15 @@ pub fn cmd_imports(root: &Path, file: &str) -> Result<()> {
                 let keyword = caps.get(1).map(|m| m.as_str()).unwrap_or("");
                 let module = caps.get(2).map(|m| m.as_str()).unwrap_or("");
                 // Skip pragmas
-                if module != "strict" && module != "warnings" && module != "utf8" &&
-                   module != "constant" && module != "base" && module != "parent" &&
-                   !module.starts_with("v5") && !module.starts_with("5.") {
+                if module != "strict"
+                    && module != "warnings"
+                    && module != "utf8"
+                    && module != "constant"
+                    && module != "base"
+                    && module != "parent"
+                    && !module.starts_with("v5")
+                    && !module.starts_with("5.")
+                {
                     imports.push(format!("{} {}", keyword, module));
                 }
             }
@@ -409,11 +516,13 @@ pub fn cmd_api(root: &Path, module_path: &str, limit: usize) -> Result<()> {
     // Also try looking up module path from DB
     if !module_dir.exists() {
         if let Ok(conn) = crate::db::open_db(root) {
-            let db_path: Option<String> = conn.query_row(
-                "SELECT path FROM modules WHERE name = ?1",
-                rusqlite::params![module_path],
-                |row| row.get(0),
-            ).ok();
+            let db_path: Option<String> = conn
+                .query_row(
+                    "SELECT path FROM modules WHERE name = ?1",
+                    rusqlite::params![module_path],
+                    |row| row.get(0),
+                )
+                .ok();
             if let Some(p) = db_path {
                 let alt = root.join(&p);
                 if alt.exists() {
@@ -433,20 +542,30 @@ pub fn cmd_api(root: &Path, module_path: &str, limit: usize) -> Result<()> {
 
     let mut items: Vec<(String, usize, String)> = vec![];
 
-    search_files(&module_dir, pattern, &["kt", "java"], |path, line_num, line| {
-        if items.len() >= limit { return; }
+    search_files(
+        &module_dir,
+        pattern,
+        &["kt", "java"],
+        |path, line_num, line| {
+            if items.len() >= limit {
+                return;
+            }
 
-        // Skip private/internal
-        if line.contains("private ") || line.contains("internal ") {
-            return;
-        }
+            // Skip private/internal
+            if line.contains("private ") || line.contains("internal ") {
+                return;
+            }
 
-        let rel_path = relative_path(root, path);
-        let content: String = line.trim().chars().take(100).collect();
-        items.push((rel_path, line_num, content));
-    })?;
+            let rel_path = relative_path(root, path);
+            let content: String = line.trim().chars().take(100).collect();
+            items.push((rel_path, line_num, content));
+        },
+    )?;
 
-    println!("{}", format!("Public API of '{}' ({}):", module_path, items.len()).bold());
+    println!(
+        "{}",
+        format!("Public API of '{}' ({}):", module_path, items.len()).bold()
+    );
 
     for (path, line_num, content) in &items {
         println!("  {}:{}", path.cyan(), line_num);
@@ -567,16 +686,24 @@ pub fn cmd_changed(root: &Path, base: &str) -> Result<()> {
 
     if !output.status.success() {
         let stderr = std::str::from_utf8(&output.stderr).unwrap_or("");
-        println!("{}", format!("Failed to get {} diff: {}", vcs, stderr.trim()).red());
+        println!(
+            "{}",
+            format!("Failed to get {} diff: {}", vcs, stderr.trim()).red()
+        );
         return Ok(());
     }
 
     let changed_files: Vec<&str> = std::str::from_utf8(&output.stdout)?
         .lines()
         .filter(|f| {
-            f.ends_with(".kt") || f.ends_with(".java") ||
-            f.ends_with(".swift") || f.ends_with(".m") || f.ends_with(".h") ||
-            f.ends_with(".pm") || f.ends_with(".pl") || f.ends_with(".t")
+            f.ends_with(".kt")
+                || f.ends_with(".java")
+                || f.ends_with(".swift")
+                || f.ends_with(".m")
+                || f.ends_with(".h")
+                || f.ends_with(".pm")
+                || f.ends_with(".pl")
+                || f.ends_with(".t")
         })
         .collect();
 
@@ -585,7 +712,15 @@ pub fn cmd_changed(root: &Path, base: &str) -> Result<()> {
         return Ok(());
     }
 
-    println!("{}", format!("Changed symbols since '{}' ({} files):", base, changed_files.len()).bold());
+    println!(
+        "{}",
+        format!(
+            "Changed symbols since '{}' ({} files):",
+            base,
+            changed_files.len()
+        )
+        .bold()
+    );
 
     // Parse changed files for symbols
     let class_re = Regex::new(r"(?m)^\s*(class|interface|object|enum\s+class)\s+(\w+)")?;
@@ -593,7 +728,9 @@ pub fn cmd_changed(root: &Path, base: &str) -> Result<()> {
 
     for file in &changed_files {
         let file_path = root.join(file);
-        if !file_path.exists() { continue; }
+        if !file_path.exists() {
+            continue;
+        }
 
         let content = match std::fs::read_to_string(&file_path) {
             Ok(c) => c,

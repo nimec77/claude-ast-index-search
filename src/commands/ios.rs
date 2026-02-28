@@ -16,8 +16,8 @@ use anyhow::Result;
 use colored::Colorize;
 use regex::Regex;
 
+use super::{relative_path, search_files};
 use crate::db;
-use super::{search_files, relative_path};
 
 /// Find storyboard usages of a class
 pub fn cmd_storyboard_usages(root: &Path, class_name: &str, module: Option<&str>) -> Result<()> {
@@ -58,24 +58,49 @@ pub fn cmd_storyboard_usages(root: &Path, class_name: &str, module: Option<&str>
     };
 
     let mut stmt = conn.prepare(&query)?;
+    #[allow(clippy::type_complexity)]
     let results: Vec<(String, i64, String, Option<String>, Option<String>)> = stmt
         .query_map([], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
         })?
         .filter_map(|r| r.ok())
         .collect();
 
     if results.is_empty() {
-        println!("{}", format!("No storyboard usages found for '{}'", class_name).yellow());
+        println!(
+            "{}",
+            format!("No storyboard usages found for '{}'", class_name).yellow()
+        );
     } else {
         println!(
             "{}",
-            format!("Storyboard usages for '{}' ({}):", class_name, results.len()).bold()
+            format!(
+                "Storyboard usages for '{}' ({}):",
+                class_name,
+                results.len()
+            )
+            .bold()
         );
         for (path, line, cls, usage_type, sb_id) in &results {
             let type_str = usage_type.as_deref().unwrap_or("unknown");
-            let id_str = sb_id.as_deref().map(|s| format!(" (id: {})", s)).unwrap_or_default();
-            println!("  {}:{} {} [{}]{}", path.cyan(), line, cls, type_str, id_str);
+            let id_str = sb_id
+                .as_deref()
+                .map(|s| format!(" (id: {})", s))
+                .unwrap_or_default();
+            println!(
+                "  {}:{} {} [{}]{}",
+                path.cyan(),
+                line,
+                cls,
+                type_str,
+                id_str
+            );
         }
     }
 
@@ -84,7 +109,13 @@ pub fn cmd_storyboard_usages(root: &Path, class_name: &str, module: Option<&str>
 }
 
 /// Find iOS asset usages
-pub fn cmd_asset_usages(root: &Path, asset: &str, module: Option<&str>, asset_type: Option<&str>, unused: bool) -> Result<()> {
+pub fn cmd_asset_usages(
+    root: &Path,
+    asset: &str,
+    module: Option<&str>,
+    asset_type: Option<&str>,
+    unused: bool,
+) -> Result<()> {
     let start = Instant::now();
 
     if !db::db_exists(root) {
@@ -105,7 +136,9 @@ pub fn cmd_asset_usages(root: &Path, asset: &str, module: Option<&str>, asset_ty
         }
 
         let m = module.unwrap();
-        let type_filter = asset_type.map(|t| format!("AND a.type = '{}'", t)).unwrap_or_default();
+        let type_filter = asset_type
+            .map(|t| format!("AND a.type = '{}'", t))
+            .unwrap_or_default();
 
         let query = format!(
             r#"
@@ -129,7 +162,10 @@ pub fn cmd_asset_usages(root: &Path, asset: &str, module: Option<&str>, asset_ty
             .collect();
 
         if results.is_empty() {
-            println!("{}", format!("No unused assets found in module '{}'", m).green());
+            println!(
+                "{}",
+                format!("No unused assets found in module '{}'", m).green()
+            );
         } else {
             println!(
                 "{}",
@@ -141,7 +177,9 @@ pub fn cmd_asset_usages(root: &Path, asset: &str, module: Option<&str>, asset_ty
         }
     } else if asset.is_empty() {
         // List all assets
-        let type_filter = asset_type.map(|t| format!("WHERE type = '{}'", t)).unwrap_or_default();
+        let type_filter = asset_type
+            .map(|t| format!("WHERE type = '{}'", t))
+            .unwrap_or_default();
         let query = format!(
             "SELECT name, type, file_path FROM ios_assets {} ORDER BY type, name LIMIT 100",
             type_filter
@@ -173,13 +211,18 @@ pub fn cmd_asset_usages(root: &Path, asset: &str, module: Option<&str>, asset_ty
 
         let mut stmt = conn.prepare(&query)?;
         let results: Vec<(String, String, String, i64)> = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
             .unwrap()
             .filter_map(|r| r.ok())
             .collect();
 
         if results.is_empty() {
-            println!("{}", format!("No usages found for asset '{}'", asset).yellow());
+            println!(
+                "{}",
+                format!("No usages found for asset '{}'", asset).yellow()
+            );
         } else {
             println!(
                 "{}",
@@ -202,7 +245,9 @@ pub fn cmd_swiftui(root: &Path, query: Option<&str>, limit: usize) -> Result<()>
     // Search for SwiftUI state properties: @State, @Binding, @Published, @ObservedObject, @StateObject, @EnvironmentObject
     let pattern = r"@(State|Binding|Published|ObservedObject|StateObject|EnvironmentObject)\s+(private\s+)?(var|let)\s+\w+";
 
-    let prop_regex = Regex::new(r"@(State|Binding|Published|ObservedObject|StateObject|EnvironmentObject)\s+(?:private\s+)?(?:var|let)\s+(\w+)")?;
+    let prop_regex = Regex::new(
+        r"@(State|Binding|Published|ObservedObject|StateObject|EnvironmentObject)\s+(?:private\s+)?(?:var|let)\s+(\w+)",
+    )?;
 
     let mut results: Vec<(String, String, String, usize)> = vec![];
 
@@ -244,7 +289,11 @@ pub fn cmd_swiftui(root: &Path, query: Option<&str>, limit: usize) -> Result<()>
     }
 
     for (prop_type, props) in &by_type {
-        println!("\n  {} ({}):", format!("@{}", prop_type).cyan(), props.len());
+        println!(
+            "\n  {} ({}):",
+            format!("@{}", prop_type).cyan(),
+            props.len()
+        );
         for (name, path, line) in props.iter().take(10) {
             println!("    {}: {}:{}", name, path, line);
         }
@@ -287,10 +336,7 @@ pub fn cmd_async_funcs(root: &Path, query: Option<&str>, limit: usize) -> Result
         }
     })?;
 
-    println!(
-        "{}",
-        format!("Async functions ({}):", results.len()).bold()
-    );
+    println!("{}", format!("Async functions ({}):", results.len()).bold());
 
     for (func_name, path, line_num) in &results {
         println!("  {}: {}:{}", func_name.cyan(), path, line_num);
@@ -307,7 +353,9 @@ pub fn cmd_publishers(root: &Path, query: Option<&str>, limit: usize) -> Result<
     // Search for Combine publishers: PassthroughSubject, CurrentValueSubject, AnyPublisher, Published
     let pattern = r"(PassthroughSubject|CurrentValueSubject|AnyPublisher|@Published)\s*[<(]";
 
-    let pub_regex = Regex::new(r"(PassthroughSubject|CurrentValueSubject|AnyPublisher)(?:\s*<[^>]+>)?\s*(?:\(\)|[,;=])|@Published\s+(?:private\s+)?var\s+(\w+)")?;
+    let pub_regex = Regex::new(
+        r"(PassthroughSubject|CurrentValueSubject|AnyPublisher)(?:\s*<[^>]+>)?\s*(?:\(\)|[,;=])|@Published\s+(?:private\s+)?var\s+(\w+)",
+    )?;
 
     let mut results: Vec<(String, String, String, usize)> = vec![];
 

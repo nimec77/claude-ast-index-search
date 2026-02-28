@@ -52,8 +52,14 @@ pub fn cmd_watch(root: &Path) -> Result<()> {
                             let s = c.as_os_str().to_str().unwrap_or("");
                             matches!(
                                 s,
-                                "build" | "node_modules" | ".gradle" | ".git" | "target"
-                                    | ".idea" | "__pycache__" | ".dart_tool"
+                                "build"
+                                    | "node_modules"
+                                    | ".gradle"
+                                    | ".git"
+                                    | "target"
+                                    | ".idea"
+                                    | "__pycache__"
+                                    | ".dart_tool"
                             )
                         })
                     })

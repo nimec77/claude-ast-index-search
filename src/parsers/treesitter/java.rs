@@ -1,12 +1,12 @@
 //! Tree-sitter based Java parser
 
 use anyhow::Result;
-use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 use std::sync::LazyLock;
+use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
+use super::{LanguageParser, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
-use super::{LanguageParser, parse_tree, node_text, node_line, line_text};
 
 static JAVA_LANGUAGE: LazyLock<Language> = LazyLock::new(|| tree_sitter_java::LANGUAGE.into());
 
@@ -21,15 +21,45 @@ pub struct JavaParser;
 
 /// Significant Java/Spring annotations to track
 const SIGNIFICANT_ANNOTATIONS: &[&str] = &[
-    "RestController", "Controller", "Service", "Repository", "Component",
-    "Entity", "Table", "Configuration", "Bean",
-    "GetMapping", "PostMapping", "PutMapping", "DeleteMapping", "PatchMapping",
-    "RequestMapping", "Autowired", "Override", "Transactional",
-    "SpringBootApplication", "EnableAutoConfiguration",
-    "Test", "BeforeEach", "AfterEach", "BeforeAll", "AfterAll",
-    "Inject", "Singleton", "Provides", "Binds", "Module",
-    "Data", "Value", "Builder", "AllArgsConstructor", "NoArgsConstructor",
-    "Getter", "Setter", "Slf4j", "Log4j2",
+    "RestController",
+    "Controller",
+    "Service",
+    "Repository",
+    "Component",
+    "Entity",
+    "Table",
+    "Configuration",
+    "Bean",
+    "GetMapping",
+    "PostMapping",
+    "PutMapping",
+    "DeleteMapping",
+    "PatchMapping",
+    "RequestMapping",
+    "Autowired",
+    "Override",
+    "Transactional",
+    "SpringBootApplication",
+    "EnableAutoConfiguration",
+    "Test",
+    "BeforeEach",
+    "AfterEach",
+    "BeforeAll",
+    "AfterAll",
+    "Inject",
+    "Singleton",
+    "Provides",
+    "Binds",
+    "Module",
+    "Data",
+    "Value",
+    "Builder",
+    "AllArgsConstructor",
+    "NoArgsConstructor",
+    "Getter",
+    "Setter",
+    "Slf4j",
+    "Log4j2",
 ];
 
 impl LanguageParser for JavaParser {
@@ -41,7 +71,10 @@ impl LanguageParser for JavaParser {
 
         let capture_names = query.capture_names();
         let idx = |name: &str| -> Option<u32> {
-            capture_names.iter().position(|n| *n == name).map(|i| i as u32)
+            capture_names
+                .iter()
+                .position(|n| *n == name)
+                .map(|i| i as u32)
         };
 
         let idx_class_name = idx("class_name");
@@ -59,7 +92,8 @@ impl LanguageParser for JavaParser {
         let idx_annotation_name = idx("annotation_name");
         let idx_annotation_call_name = idx("annotation_call_name");
 
-        let mut emitted: std::collections::HashSet<(String, usize)> = std::collections::HashSet::new();
+        let mut emitted: std::collections::HashSet<(String, usize)> =
+            std::collections::HashSet::new();
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 
@@ -225,7 +259,12 @@ impl LanguageParser for JavaParser {
 /// Check if a node is inside a class_body, interface_body, or enum_body
 fn is_inside_type_body(node: &tree_sitter::Node) -> bool {
     node.parent()
-        .map(|p| matches!(p.kind(), "class_body" | "interface_body" | "enum_body" | "enum_body_declarations"))
+        .map(|p| {
+            matches!(
+                p.kind(),
+                "class_body" | "interface_body" | "enum_body" | "enum_body_declarations"
+            )
+        })
         .unwrap_or(false)
 }
 
@@ -254,7 +293,10 @@ fn extract_class_parents(content: &str, class_node: &tree_sitter::Node) -> Vec<(
 }
 
 /// Extract parent types from an interface_declaration (extends)
-fn extract_interface_parents(content: &str, iface_node: &tree_sitter::Node) -> Vec<(String, String)> {
+fn extract_interface_parents(
+    content: &str,
+    iface_node: &tree_sitter::Node,
+) -> Vec<(String, String)> {
     let mut parents = Vec::new();
     let mut cursor = iface_node.walk();
 
@@ -364,16 +406,29 @@ mod tests {
     fn test_parse_class() {
         let content = "public class UserService {\n}\n";
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "UserService" && s.kind == SymbolKind::Class));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "UserService" && s.kind == SymbolKind::Class)
+        );
     }
 
     #[test]
     fn test_parse_class_with_extends() {
-        let content = "public class UserController extends BaseController implements Serializable {\n}\n";
+        let content =
+            "public class UserController extends BaseController implements Serializable {\n}\n";
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
         let cls = symbols.iter().find(|s| s.name == "UserController").unwrap();
-        assert!(cls.parents.iter().any(|(p, k)| p == "BaseController" && k == "extends"));
-        assert!(cls.parents.iter().any(|(p, k)| p == "Serializable" && k == "implements"));
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "BaseController" && k == "extends")
+        );
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "Serializable" && k == "implements")
+        );
     }
 
     #[test]
@@ -382,14 +437,23 @@ mod tests {
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
         let iface = symbols.iter().find(|s| s.name == "UserRepository").unwrap();
         assert_eq!(iface.kind, SymbolKind::Interface);
-        assert!(iface.parents.iter().any(|(p, k)| p == "JpaRepository" && k == "extends"));
+        assert!(
+            iface
+                .parents
+                .iter()
+                .any(|(p, k)| p == "JpaRepository" && k == "extends")
+        );
     }
 
     #[test]
     fn test_parse_enum() {
         let content = "public enum Status {\n    ACTIVE,\n    INACTIVE;\n}\n";
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Status" && s.kind == SymbolKind::Enum));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Status" && s.kind == SymbolKind::Enum)
+        );
     }
 
     #[test]
@@ -401,9 +465,21 @@ mod tests {
 }
 "#;
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "getUsers" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "validate" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "format" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "getUsers" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "validate" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "format" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -416,7 +492,11 @@ mod tests {
 }
 "#;
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "User" && s.kind == SymbolKind::Class));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "User" && s.kind == SymbolKind::Class)
+        );
         // Constructor is indexed as a function with the class name
         assert!(symbols.iter().filter(|s| s.name == "User").count() >= 2);
     }
@@ -430,9 +510,21 @@ mod tests {
 }
 "#;
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "apiUrl" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Property));
-        assert!(symbols.iter().any(|s| s.name == "items" && s.kind == SymbolKind::Property));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "apiUrl" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "items" && s.kind == SymbolKind::Property)
+        );
     }
 
     #[test]
@@ -448,10 +540,26 @@ public class UserController {
 }
 "#;
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "@RestController" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "@RequestMapping" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "@GetMapping" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "@Override" && s.kind == SymbolKind::Annotation));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "@RestController" && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "@RequestMapping" && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "@GetMapping" && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "@Override" && s.kind == SymbolKind::Annotation)
+        );
     }
 
     #[test]
@@ -468,17 +576,42 @@ public class PaymentService {
 }
 "#;
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "@Service" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "@Autowired" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "@Transactional" && s.kind == SymbolKind::Annotation));
-        assert!(symbols.iter().any(|s| s.name == "PaymentService" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s| s.name == "processPayment" && s.kind == SymbolKind::Function));
-        assert!(symbols.iter().any(|s| s.name == "repository" && s.kind == SymbolKind::Property));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "@Service" && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "@Autowired" && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "@Transactional" && s.kind == SymbolKind::Annotation)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "PaymentService" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "processPayment" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "repository" && s.kind == SymbolKind::Property)
+        );
     }
 
     #[test]
     fn test_comments_ignored() {
-        let content = "// class FakeClass {}\npublic class RealClass {}\n/* void fakeMethod() {} */\n";
+        let content =
+            "// class FakeClass {}\npublic class RealClass {}\n/* void fakeMethod() {} */\n";
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
         assert!(symbols.iter().any(|s| s.name == "RealClass"));
         assert!(!symbols.iter().any(|s| s.name == "FakeClass"));
@@ -498,8 +631,16 @@ public class Foo {
         assert!(!symbols.iter().any(|s| s.name == "@SuppressWarnings"));
         assert!(!symbols.iter().any(|s| s.name == "@Deprecated"));
         // But class and method should still be indexed
-        assert!(symbols.iter().any(|s| s.name == "Foo" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s| s.name == "bar" && s.kind == SymbolKind::Function));
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Foo" && s.kind == SymbolKind::Class)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "bar" && s.kind == SymbolKind::Function)
+        );
     }
 
     #[test]
@@ -507,7 +648,15 @@ public class Foo {
         let content = "public class UserRepo extends CrudRepository<User, Long> implements UserRepository {\n}\n";
         let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
         let cls = symbols.iter().find(|s| s.name == "UserRepo").unwrap();
-        assert!(cls.parents.iter().any(|(p, k)| p == "CrudRepository" && k == "extends"));
-        assert!(cls.parents.iter().any(|(p, k)| p == "UserRepository" && k == "implements"));
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "CrudRepository" && k == "extends")
+        );
+        assert!(
+            cls.parents
+                .iter()
+                .any(|(p, k)| p == "UserRepository" && k == "implements")
+        );
     }
 }

@@ -168,9 +168,6 @@ pub fn cmd_unused_symbols(
         println!("  No unused symbols found.");
     }
 
-    eprintln!(
-        "\n{}",
-        format!("Time: {:?}", start.elapsed()).dimmed()
-    );
+    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
