@@ -1,4 +1,14 @@
+# Rust
 /target
+
+# IDE
+.vscode/
+
+# Claude
 .claude/
+
+# Dist
 dist/
+
+# Mobile tools
 mobile-tools/target/
