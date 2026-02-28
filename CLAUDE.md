@@ -31,11 +31,13 @@ cargo bench
 
 ### Key modules
 
-- **`src/indexer.rs`** — File discovery (respects `.gitignore`/`.arcignore`), parallel parsing with rayon in chunks of 500 files, writes to SQLite. Handles project-type auto-detection and sub-project mode.
+- **`src/indexer.rs`** — File discovery (respects `.gitignore`/`.arcignore`), parallel parsing with rayon in chunks of 500 files, writes to SQLite. Auto-detects `ProjectType` (`Android`, `IOS`, `Frontend`, `Go`, `Rust`, `Python`, `Perl`, `Bazel`, `Mixed`, `Unknown`) from marker files and handles sub-project mode.
 - **`src/db.rs`** — SQLite schema, `SymbolKind` enum, DB path (cache dir keyed by project root hash), `AST_INDEX_DB_PATH` env override.
 - **`src/parsers/`** — Two-tier parser system:
   - `treesitter/` — Tree-sitter AST parsers (primary, one per language), each implements `LanguageParser` trait. Registered in `treesitter/mod.rs::get_treesitter_parser()`.
-  - `perl.rs`, `typescript.rs`, `wsdl.rs` — Regex-based parsers (fallback or language-specific).
+  - `perl.rs`, `wsdl.rs` — Regex-based parsers for languages without tree-sitter support.
+  - `typescript.rs` — Regex-based parser used for Vue/Svelte script block extraction (TypeScript itself uses tree-sitter).
+  - `Vue`/`Svelte` files: script blocks extracted then parsed with the regex TypeScript parser (no tree-sitter parser for these).
   - `treesitter/queries/<lang>.scm` — Tree-sitter S-expression query patterns.
 - **`src/commands/`** — One file per command group (analysis, files, modules, android, ios, grep, etc.). Grep-based commands use ripgrep internals (`grep-searcher`), index-based commands query SQLite directly.
 
