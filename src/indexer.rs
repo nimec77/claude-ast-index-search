@@ -440,6 +440,7 @@ fn is_module_file(name: &str) -> bool {
         || name == "Package.swift"
         || name.ends_with(".pm")
         || name == "pom.xml"
+        || name == "pubspec.yaml"
 }
 
 /// Result of the filesystem walk in index_directory.
@@ -1092,6 +1093,34 @@ pub fn index_modules_from_files(
                             )?;
                             count += 1;
                         }
+                    }
+                }
+            }
+
+            // Flutter modules (pubspec.yaml)
+            if name_str == "pubspec.yaml"
+                && let Some(parent) = path.parent()
+            {
+                let module_path = parent
+                    .strip_prefix(root)
+                    .unwrap_or(parent)
+                    .to_string_lossy()
+                    .to_string();
+
+                if let Ok(content) = fs::read_to_string(path) {
+                    #[derive(serde::Deserialize)]
+                    struct PubSpec {
+                        name: Option<String>,
+                    }
+                    if let Ok(pubspec) = serde_yaml::from_str::<PubSpec>(&content)
+                        && let Some(ref mod_name) = pubspec.name
+                        && !mod_name.is_empty()
+                    {
+                        conn.execute(
+                            "INSERT OR IGNORE INTO modules (name, path) VALUES (?1, ?2)",
+                            rusqlite::params![mod_name, module_path],
+                        )?;
+                        count += 1;
                     }
                 }
             }
@@ -2592,5 +2621,163 @@ mod tests {
         let result = parse_file(dir.path(), &py_file).unwrap();
         assert!(result.symbols.iter().any(|s| s.name == "Service"));
         assert!(result.symbols.iter().any(|s| s.name == "process"));
+    }
+
+    // Helper: create an in-memory SQLite DB with the modules table.
+    fn make_modules_db() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE modules (
+                id   INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                path TEXT NOT NULL,
+                kind TEXT
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    // Helper: query all (name, path) rows from modules.
+    fn query_modules(conn: &rusqlite::Connection) -> Vec<(String, String)> {
+        let mut stmt = conn
+            .prepare("SELECT name, path FROM modules ORDER BY name")
+            .unwrap();
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn test_is_module_file_includes_pubspec_yaml() {
+        assert!(is_module_file("pubspec.yaml"));
+    }
+
+    #[test]
+    fn test_pubspec_yaml_basic_name_extraction() {
+        let dir = TempDir::new().unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(&pubspec, "name: my_app\n").unwrap();
+
+        let conn = make_modules_db();
+        let count = index_modules_from_files(&conn, dir.path(), &[pubspec]).unwrap();
+
+        assert_eq!(count, 1);
+        let rows = query_modules(&conn);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "my_app");
+        // Root-level pubspec.yaml -> empty module path
+        assert_eq!(rows[0].1, "");
+    }
+
+    #[test]
+    fn test_pubspec_yaml_nested_path() {
+        let dir = TempDir::new().unwrap();
+        let sub = dir.path().join("packages").join("feature_auth");
+        fs::create_dir_all(&sub).unwrap();
+        let pubspec = sub.join("pubspec.yaml");
+        fs::write(&pubspec, "name: feature_auth\n").unwrap();
+
+        let conn = make_modules_db();
+        let count = index_modules_from_files(&conn, dir.path(), &[pubspec]).unwrap();
+
+        assert_eq!(count, 1);
+        let rows = query_modules(&conn);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "feature_auth");
+        assert_eq!(rows[0].1, "packages/feature_auth");
+    }
+
+    #[test]
+    fn test_pubspec_yaml_missing_name_field_is_skipped() {
+        let dir = TempDir::new().unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(&pubspec, "version: 1.0.0\ndescription: No name field\n").unwrap();
+
+        let conn = make_modules_db();
+        let count = index_modules_from_files(&conn, dir.path(), &[pubspec]).unwrap();
+
+        assert_eq!(count, 0);
+        assert!(query_modules(&conn).is_empty());
+    }
+
+    #[test]
+    fn test_pubspec_yaml_malformed_yaml_is_skipped() {
+        let dir = TempDir::new().unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(&pubspec, "name: [unclosed bracket\n").unwrap();
+
+        let conn = make_modules_db();
+        let count = index_modules_from_files(&conn, dir.path(), &[pubspec]).unwrap();
+
+        assert_eq!(count, 0);
+        assert!(query_modules(&conn).is_empty());
+    }
+
+    #[test]
+    fn test_pubspec_yaml_complex_structure_extracts_only_name() {
+        let dir = TempDir::new().unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(
+            &pubspec,
+            r#"name: feature_auth
+version: 2.1.0
+description: Authentication feature module
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.1.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+"#,
+        )
+        .unwrap();
+
+        let conn = make_modules_db();
+        let count = index_modules_from_files(&conn, dir.path(), &[pubspec]).unwrap();
+
+        assert_eq!(count, 1);
+        let rows = query_modules(&conn);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "feature_auth");
+    }
+
+    #[test]
+    fn test_pubspec_yaml_empty_name_is_skipped() {
+        let dir = TempDir::new().unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(&pubspec, "name: \"\"\n").unwrap();
+
+        let conn = make_modules_db();
+        let count = index_modules_from_files(&conn, dir.path(), &[pubspec]).unwrap();
+
+        assert_eq!(count, 0);
+        assert!(query_modules(&conn).is_empty());
+    }
+
+    #[test]
+    fn test_pubspec_yaml_no_regression_in_gradle_parsing() {
+        let dir = TempDir::new().unwrap();
+        let sub = dir.path().join("app");
+        fs::create_dir_all(&sub).unwrap();
+        let gradle = sub.join("build.gradle");
+        fs::write(&gradle, "android { }\n").unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(&pubspec, "name: my_app\n").unwrap();
+
+        let conn = make_modules_db();
+        let count = index_modules_from_files(&conn, dir.path(), &[gradle, pubspec]).unwrap();
+
+        // Gradle inserts 1 (path-derived) + Flutter inserts 1
+        assert_eq!(count, 2);
+        let rows = query_modules(&conn);
+        assert_eq!(rows.len(), 2);
+        let names: Vec<&str> = rows.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(names.contains(&"app"));
+        assert!(names.contains(&"my_app"));
     }
 }

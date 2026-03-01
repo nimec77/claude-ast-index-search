@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- **Flutter module indexing** — `ast-index modules` now lists Flutter packages by extracting the `name:` field from `pubspec.yaml`; `serde_yaml` added for YAML parsing; malformed YAML, missing `name:` fields, and empty names are silently skipped; `INSERT OR IGNORE` prevents duplicate module entries in monorepos.
+
 ## [3.22.0] - 2026-03-01
 
 - **Flutter project detection** — `ast-index` now recognizes Flutter/Dart projects via `pubspec.yaml`; `ProjectType::Flutter` added to the enum, `detect_project_type()` returns `Flutter (Dart)` when `pubspec.yaml` is the sole marker, `find_project_root()` walks up to the directory containing `pubspec.yaml`, and `has_build_marker()` recognizes `pubspec.yaml` as a sub-project boundary in monorepos. Mixed detection (Flutter + other markers) works automatically. Three new unit tests added.
