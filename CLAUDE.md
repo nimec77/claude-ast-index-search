@@ -56,14 +56,30 @@ Walks ancestor directories looking for, in order: existing index DB → Gradle m
 
 For large monorepos (≥65 K files with 2+ subdirectories containing platform markers), `find_sub_projects()` partitions the tree and indexes each sub-project separately into the shared DB. Controllable via `--sub-projects` flag.
 
+### Plugin directory
+
+`plugin/` is the Claude Code plugin shipped with the binary. `plugin/.claude-plugin/plugin.json` auto-discovers all files in `./commands` and `./skills`.
+
+- **`plugin/commands/initialize-<lang>.md`** — one per language; slash command that sets up `.claude/settings.json` and `.claude/rules/ast-index.md` in the user's project. All initialize commands share the same 5-step structure (Check Prerequisites → settings.json → rules file → rebuild → verify). The rules file embeds a 3-column Command Reference table and a platform-specific 2-column commands table.
+- **`plugin/skills/ast-index/SKILL.md`** — skill descriptor with trigger phrases and the supported-projects table. References per-language detail files.
+- **`plugin/skills/ast-index/references/<lang>-commands.md`** — exhaustive command reference for each language; linked from SKILL.md.
+
+The plugin version in `plugin.json` must be bumped in sync with Cargo.toml on release.
+
 ### Adding a new language parser
 
+**Rust side:**
 1. Add tree-sitter crate to `Cargo.toml`
 2. Create `src/parsers/treesitter/queries/<lang>.scm`
 3. Create `src/parsers/treesitter/<lang>.rs` implementing `LanguageParser`
 4. Register in `src/parsers/treesitter/mod.rs::get_treesitter_parser()`
 5. Add file extensions in `src/indexer.rs`
 6. Add tests (see existing parsers as reference)
+
+**Plugin side (do alongside the Rust changes):**
+7. Create `plugin/commands/initialize-<lang>.md` following the pattern of existing initialize commands; verify step should use a language-relevant search term
+8. Create `plugin/skills/ast-index/references/<lang>-commands.md` with the exhaustive command list for the new language
+9. Add the language to the supported-projects table in `plugin/skills/ast-index/SKILL.md`
 
 ### `ParsedSymbol` and `SymbolKind`
 
