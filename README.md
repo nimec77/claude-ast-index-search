@@ -1,4 +1,4 @@
-# ast-index v3.21.0
+# ast-index v3.25.0
 
 Fast code search CLI for 16 programming languages. Native Rust implementation.
 
@@ -329,6 +329,23 @@ ios_asset_usages (id, asset_id, usage_file, usage_line, usage_type)
 ```
 
 ## Changelog
+
+### 3.25.0
+- **Quality gate** — all linting, formatting, and tests pass (398 tests, zero warnings); verified on nightly toolchain
+
+### 3.24.0
+- **`initialize-flutter` plugin command** — `/initialize-flutter` configures ast-index for Dart/Flutter projects with Flutter-specific search rules, widget detection, and BLoC/Provider pattern hints
+
+### 3.23.0
+- **Flutter module indexing** — `modules` command lists Flutter packages by extracting `name:` from `pubspec.yaml`; `serde_yaml_ng` for YAML parsing
+
+### 3.22.0
+- **Flutter project detection** — auto-detect Flutter/Dart projects via `pubspec.yaml`; new `ProjectType::Flutter`, `find_project_root()` walks up to `pubspec.yaml` directory, sub-project boundary support
+
+### 3.21.1
+- **CLAUDE.md** — AI guidance file with architecture overview, command reference, code style rules, and parser development guide
+- **Nightly toolchain** — updated Rust toolchain to nightly
+- **Code style cleanup** — consolidated nested conditionals, standardized guard-clause formatting
 
 ### 3.21.0
 - **PHP support** — full tree-sitter parser for PHP: namespaces, classes (extends/implements), interfaces, traits, enums, functions, methods, constants, properties, `use` imports, trait `use`; file extensions `.php`, `.phtml`
@@ -698,6 +715,26 @@ ast-index install-claude-plugin
 ```
 
 Restart Claude Code to activate the plugin.
+
+#### Install Plugin from Source
+
+If you built `ast-index` from source and want to use the plugin locally:
+
+```bash
+# Build the binary
+cargo build --release
+
+# Option 1: Use the built binary's install command (fetches plugin from GitHub)
+./target/release/ast-index install-claude-plugin
+
+# Option 2: Load plugin from local directory (development/testing)
+claude --plugin-dir ./plugin
+```
+
+The `plugin/` directory contains:
+- `.claude-plugin/plugin.json` — plugin manifest
+- `commands/` — 7 initialize commands (`/initialize-android`, `/initialize-ios`, etc.)
+- `skills/ast-index/` — skill descriptor and 15 language reference files
 
 #### Update Plugin
 
