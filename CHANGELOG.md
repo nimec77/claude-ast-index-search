@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.25.0] - 2026-03-01
+
 - **Phase 4 quality gate (CS-4-4)** -- `cargo clippy -- -D warnings`, `cargo clippy --tests -- -D warnings`, and `cargo fmt --check` all pass with exit code 0 and zero issues across the full codebase including all Flutter/Dart additions from Phases 1-3 and all new Phase 4 test code; `cargo test` confirms 398 tests green (379 unit + 19 memory); zero new `#[allow(...)]` suppression annotations added; verified on `rustc 1.96.0-nightly (38c0de8dc 2026-02-28)` / `clippy 0.1.95`.
 
 ## [3.24.0] - 2026-03-01
