@@ -4,10 +4,10 @@
 
 ## Tasks
 
-- [ ] 4.1 Add project detection unit tests — assert `detect_project_type()` returns `Flutter` for a directory containing `pubspec.yaml`
-- [ ] 4.2 Add module parsing unit tests — fixture `pubspec.yaml` with `name:`, `dependencies:`, and `dev_dependencies:` sections; assert correct extraction
-- [ ] 4.3 Add an end-to-end integration test using a minimal Flutter project fixture — index, then query symbols, modules, and deps
-- [ ] 4.4 Run `cargo clippy -- -D warnings` and `cargo fmt` — zero new warnings, all formatting clean
+- [x] 4.1 Add project detection unit tests — assert `detect_project_type()` returns `Flutter` for a directory containing `pubspec.yaml`
+- [x] 4.2 Add module parsing unit tests — fixture `pubspec.yaml` with `name:`, `dependencies:`, and `dev_dependencies:` sections; assert correct extraction
+- [x] 4.3 Add an end-to-end integration test using a minimal Flutter project fixture — index, then query symbols, modules, and deps
+- [x] 4.4 Run `cargo clippy -- -D warnings` and `cargo fmt` — zero new warnings, all formatting clean
 
 ## Acceptance Criteria
 

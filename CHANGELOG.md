@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- **Phase 4 quality gate (CS-4-4)** -- `cargo clippy -- -D warnings`, `cargo clippy --tests -- -D warnings`, and `cargo fmt --check` all pass with exit code 0 and zero issues across the full codebase including all Flutter/Dart additions from Phases 1-3 and all new Phase 4 test code; `cargo test` confirms 398 tests green (379 unit + 19 memory); zero new `#[allow(...)]` suppression annotations added; verified on `rustc 1.96.0-nightly (38c0de8dc 2026-02-28)` / `clippy 0.1.95`.
+
 ## [3.24.0] - 2026-03-01
 
 - **`initialize-flutter` plugin command** — new `plugin/commands/initialize-flutter.md` command configures ast-index for Dart/Flutter projects; sets up `.claude/settings.json` and `.claude/rules/ast-index.md` with Flutter-specific search rules (widget detection, BLoC/Provider/Cubit pattern hints) and a 10-row Flutter/Dart-Specific Commands table covering StatelessWidget, StatefulWidget, BLoC, ChangeNotifier, Cubit, mixins, extensions, widget hierarchy, Navigator usages, and project map; verify step uses `ast-index search "Widget"`; optional Flutter Project Detection section checks for BLoC, Provider, and Riverpod patterns.

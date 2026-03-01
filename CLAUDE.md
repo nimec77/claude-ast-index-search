@@ -13,6 +13,7 @@ cargo build --release        # Binary: target/release/ast-index
 cargo test                                      # All tests
 cargo test parsers::treesitter::typescript      # Single module
 cargo test test_pubspec_yaml_basic              # Single test by name (substring match)
+cargo test --test memory_tests -- --test-threads=1  # Memory regression tests (MUST be single-threaded)
 
 # Lint
 cargo clippy -- -D warnings  # Zero new warnings required
@@ -55,6 +56,10 @@ Walks ancestor directories looking for, in order: existing index DB → Gradle m
 ### Sub-project mode
 
 For large monorepos (≥65 K files with 2+ subdirectories containing platform markers), `find_sub_projects()` partitions the tree and indexes each sub-project separately into the shared DB. Controllable via `--sub-projects` flag.
+
+### Extra roots
+
+`add-root <path>` registers additional source directories (stored in the `metadata` table) that are merged into the main index on `rebuild`. Extra roots survive `rebuild` (they are re-read from the DB, not deleted with it). Use `--force` to add a root that overlaps with the project root.
 
 ### Plugin directory
 
@@ -102,3 +107,5 @@ The **rebuild path** (`--rebuild modules` / `--rebuild deps`) uses `collect_buil
 - Extract helper functions when 3+ match arms share structure
 - All regex via `std::sync::LazyLock` — never compile per-call
 - In-memory SQLite helpers (`make_modules_db()`, `query_modules()`) for unit tests that need a DB; follow this pattern for new DB-touching tests
+- Memory regression tests in `tests/memory_tests.rs` use a custom `#[global_allocator]` — they **must** run with `--test-threads=1` since the allocator counter is global
+- Many index-based commands accept `--format json` for machine-readable output
