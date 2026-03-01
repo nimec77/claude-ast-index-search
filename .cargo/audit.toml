@@ -1,0 +1,7 @@
+[advisories]
+# RUSTSEC-2026-0009: Denial of Service via Stack Exhaustion in `time` crate
+# Affected: time v0.3.45 (transitive dependency via rusqlite 0.38.0)
+# Solution: Upgrade to time >= 0.3.47 (blocked by rusqlite pin)
+# This advisory is pre-existing and was not introduced by this ticket (CS-1-1).
+# Ignored until rusqlite is updated to pull in time >= 0.3.47.
+ignore = ["RUSTSEC-2026-0009"]

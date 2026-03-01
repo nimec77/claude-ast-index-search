@@ -50,6 +50,7 @@ pub enum ProjectType {
     Go,       // Go - go.mod
     Rust,     // Rust - Cargo.toml
     Bazel,    // Bazel - BUILD, WORKSPACE
+    Flutter,  // Dart - pubspec.yaml
     Mixed,    // Multiple platforms present
     Unknown,
 }
@@ -65,6 +66,7 @@ impl ProjectType {
             ProjectType::Go => "Go",
             ProjectType::Rust => "Rust",
             ProjectType::Bazel => "Bazel",
+            ProjectType::Flutter => "Flutter (Dart)",
             ProjectType::Mixed => "Mixed",
             ProjectType::Unknown => "Unknown",
         }
@@ -139,6 +141,7 @@ fn has_build_marker(path: &Path) -> bool {
         || path.join("BUILD").exists()
         || path.join("BUILD.bazel").exists()
         || path.join("CMakeLists.txt").exists()
+        || path.join("pubspec.yaml").exists()
 }
 
 /// Detect project type by looking for marker files
@@ -204,6 +207,9 @@ pub fn detect_project_type(root: &Path) -> ProjectType {
         || root.join("WORKSPACE.bazel").exists()
         || root.join("MODULE.bazel").exists();
 
+    // Flutter/Dart project detection
+    let has_flutter = root.join("pubspec.yaml").exists();
+
     // Count how many platforms are detected
     let count = [
         has_gradle,
@@ -214,6 +220,7 @@ pub fn detect_project_type(root: &Path) -> ProjectType {
         has_go,
         has_rust,
         has_bazel,
+        has_flutter,
     ]
     .iter()
     .filter(|&&x| x)
@@ -237,6 +244,8 @@ pub fn detect_project_type(root: &Path) -> ProjectType {
         ProjectType::Rust
     } else if has_bazel {
         ProjectType::Bazel
+    } else if has_flutter {
+        ProjectType::Flutter
     } else {
         ProjectType::Unknown
     }
@@ -2497,6 +2506,28 @@ mod tests {
     fn test_detect_unknown_project() {
         let dir = TempDir::new().unwrap();
         assert_eq!(detect_project_type(dir.path()), ProjectType::Unknown);
+    }
+
+    #[test]
+    fn test_detect_flutter_project() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("pubspec.yaml"), "").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::Flutter);
+    }
+
+    #[test]
+    fn test_detect_mixed_flutter_and_frontend() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("pubspec.yaml"), "").unwrap();
+        fs::write(dir.path().join("package.json"), "{}").unwrap();
+        assert_eq!(detect_project_type(dir.path()), ProjectType::Mixed);
+    }
+
+    #[test]
+    fn test_has_build_marker_pubspec() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("pubspec.yaml"), "").unwrap();
+        assert!(has_build_marker(dir.path()));
     }
 
     #[test]
