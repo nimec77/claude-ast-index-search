@@ -23,15 +23,10 @@ use crate::indexer;
 pub fn cmd_module(root: &Path, pattern: &str, limit: usize) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     let mut stmt = conn.prepare("SELECT name, path FROM modules WHERE name LIKE ?1 LIMIT ?2")?;
     let pattern = format!("%{}%", pattern);
@@ -59,15 +54,10 @@ pub fn cmd_module(root: &Path, pattern: &str, limit: usize) -> Result<()> {
 pub fn cmd_deps(root: &Path, module: &str) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     // Check if module deps are indexed
     let dep_count: i64 =
@@ -132,15 +122,10 @@ pub fn cmd_deps(root: &Path, module: &str) -> Result<()> {
 pub fn cmd_dependents(root: &Path, module: &str) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     // Check if module deps are indexed
     let dep_count: i64 =
@@ -212,15 +197,10 @@ pub fn cmd_unused_deps(
 ) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     // Check if module deps are indexed
     let dep_count: i64 =

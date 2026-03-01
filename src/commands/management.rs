@@ -592,15 +592,10 @@ fn cmd_rebuild_sub_projects(
 pub fn cmd_update(root: &Path) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let mut conn = db::open_db(root)?;
+    let mut conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     println!("{}", "Checking for changes...".cyan());
     let (updated, changed, deleted) = indexer::update_directory_incremental(&mut conn, root, true)?;
@@ -688,15 +683,10 @@ pub fn cmd_clear(root: &Path) -> Result<()> {
 
 /// Show index statistics
 pub fn cmd_stats(root: &Path, format: &str) -> Result<()> {
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
     let stats = db::get_stats(&conn)?;
     let db_path = db::get_db_path(root)?;
     let db_size = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0);
@@ -751,13 +741,10 @@ pub fn cmd_stats(root: &Path, format: &str) -> Result<()> {
 
 /// Add an extra source root
 pub fn cmd_add_root(root: &Path, path: &str, force: bool) -> Result<()> {
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     let abs_path = if std::path::Path::new(path).is_absolute() {
         path.to_string()
@@ -796,7 +783,6 @@ pub fn cmd_add_root(root: &Path, path: &str, force: bool) -> Result<()> {
         }
     }
 
-    let conn = db::open_db(root)?;
     db::add_extra_root(&conn, &abs_path)?;
     println!("{}", format!("Added source root: {}", abs_path).green());
     Ok(())
@@ -804,13 +790,10 @@ pub fn cmd_add_root(root: &Path, path: &str, force: bool) -> Result<()> {
 
 /// Remove an extra source root
 pub fn cmd_remove_root(root: &Path, path: &str) -> Result<()> {
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     let abs_path = if std::path::Path::new(path).is_absolute() {
         path.to_string()
@@ -819,7 +802,6 @@ pub fn cmd_remove_root(root: &Path, path: &str) -> Result<()> {
         cwd.join(path).to_string_lossy().to_string()
     };
 
-    let conn = db::open_db(root)?;
     if db::remove_extra_root(&conn, &abs_path)? {
         println!("{}", format!("Removed source root: {}", abs_path).green());
     } else {
@@ -830,15 +812,10 @@ pub fn cmd_remove_root(root: &Path, path: &str) -> Result<()> {
 
 /// List configured source roots
 pub fn cmd_list_roots(root: &Path) -> Result<()> {
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
     let extra_roots = db::get_extra_roots(&conn)?;
 
     println!("{}", "Source roots:".bold());

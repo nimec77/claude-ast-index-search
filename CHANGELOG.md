@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.25.1] - 2026-03-01
+
+- **Phase 5 codebase refactoring (CS-5)** -- comprehensive structural cleanup with zero behavioral changes: removed unused `grep-matcher` and `parking_lot` dependencies from `Cargo.toml`; extracted `open_db_or_warn` guard helper replacing 24 copy-pasted blocks across 9 command files; introduced `SearchResult::from_row` and `RefResult::from_row` eliminating 15+ duplicate row-mapping closures; renamed `SearchScope::none()` to `SearchScope::empty()` and unified 4 scoped/non-scoped function pairs into thin wrappers; unified `search_files`/`search_files_limited` by delegation; extracted `configure_walk_ignores` helper replacing 5 duplicate WalkBuilder setup blocks; replaced magic numbers (`1_000_000`, `500`, `50`) with named constants `MAX_FILE_SIZE`, `PARSE_CHUNK_SIZE`, `MAX_WALK_DEPTH` and extracted `build_thread_pool` helper; deduplicated Perl and grep command boilerplate via `grep_and_print` helper; split 2992-line `src/indexer.rs` into 4 focused sub-modules (`files.rs`, `modules.rs`, `resources.rs`, `node_modules.rs`) using Rust 2024 file-based modules; split 1468-line `src/db.rs` query layer into `src/db/queries.rs`. Net result: ~400--500 lines of duplicated code removed, `indexer.rs` reduced to 931 lines, `db.rs` reduced to 795 lines; 399 tests green, zero clippy warnings.
+
 ## [3.25.0] - 2026-03-01
 
 - **Phase 4 quality gate (CS-4-4)** -- `cargo clippy -- -D warnings`, `cargo clippy --tests -- -D warnings`, and `cargo fmt --check` all pass with exit code 0 and zero issues across the full codebase including all Flutter/Dart additions from Phases 1-3 and all new Phase 4 test code; `cargo test` confirms 398 tests green (379 unit + 19 memory); zero new `#[allow(...)]` suppression annotations added; verified on `rustc 1.96.0-nightly (38c0de8dc 2026-02-28)` / `clippy 0.1.95`.

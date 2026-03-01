@@ -25,6 +25,44 @@ use regex::Regex;
 
 use super::{relative_path, search_files_limited};
 
+/// Search files for a pattern and print results in the standard two-line format.
+///
+/// Applies an optional query filter on each matched line. Results are printed as:
+///   label (N):
+///     path:line_num
+///       content (truncated to truncate_len)
+fn grep_and_print(
+    root: &Path,
+    pattern: &str,
+    extensions: &[&str],
+    query: Option<&str>,
+    limit: usize,
+    label: &str,
+    truncate_len: usize,
+) -> Result<()> {
+    let start = Instant::now();
+    let mut items: Vec<(String, usize, String)> = vec![];
+
+    search_files_limited(root, pattern, extensions, limit, |path, line_num, line| {
+        if let Some(q) = query
+            && !line.to_lowercase().contains(&q.to_lowercase())
+        {
+            return;
+        }
+        let rel_path = relative_path(root, path);
+        let content: String = line.trim().chars().take(truncate_len).collect();
+        items.push((rel_path, line_num, content));
+    })?;
+
+    println!("{}", format!("{} ({}):", label, items.len()).bold());
+    for (path, line_num, content) in &items {
+        println!("  {}:{}", path.cyan(), line_num);
+        println!("    {}", content);
+    }
+    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
+    Ok(())
+}
+
 /// Find TODO/FIXME/HACK comments
 pub fn cmd_todo(root: &Path, pattern: &str, limit: usize) -> Result<()> {
     let start = Instant::now();
@@ -333,14 +371,7 @@ pub fn cmd_provides(root: &Path, type_name: &str, limit: usize) -> Result<()> {
     wb.hidden(true)
         .git_ignore(is_git)
         .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry));
-    if let Some(ref arc) = arc_root {
-        wb.add_custom_ignore_filename(".gitignore");
-        wb.add_custom_ignore_filename(".arcignore");
-        let root_gitignore = arc.join(".gitignore");
-        if root_gitignore.exists() {
-            wb.add_ignore(root_gitignore);
-        }
-    }
+    crate::indexer::configure_walk_ignores(&mut wb, arc_root.as_deref());
     let walker = wb.build();
 
     for entry in walker.filter_map(|e| e.ok()) {
@@ -536,73 +567,30 @@ pub fn cmd_composables(root: &Path, query: Option<&str>, limit: usize) -> Result
 
 /// Find @Deprecated annotations
 pub fn cmd_deprecated(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
     // Kotlin/Java: @Deprecated, Swift: @available(*, deprecated)
     // Perl: DEPRECATED in comments or POD =head DEPRECATED
-    let pattern = r"@Deprecated|@available\s*\([^)]*deprecated|#.*DEPRECATED|=head.*DEPRECATED";
-
-    let mut items: Vec<(String, usize, String)> = vec![];
-
-    search_files_limited(
+    grep_and_print(
         root,
-        pattern,
+        r"@Deprecated|@available\s*\([^)]*deprecated|#.*DEPRECATED|=head.*DEPRECATED",
         &["kt", "java", "swift", "m", "h", "pm", "pl", "t"],
+        query,
         limit,
-        |path, line_num, line| {
-            if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase())
-            {
-                return;
-            }
-
-            let rel_path = relative_path(root, path);
-            let content: String = line.trim().chars().take(80).collect();
-            items.push((rel_path, line_num, content));
-        },
-    )?;
-
-    println!("{}", format!("@Deprecated items ({}):", items.len()).bold());
-
-    for (path, line_num, content) in &items {
-        println!("  {}:{}", path.cyan(), line_num);
-        println!("    {}", content);
-    }
-
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
-    Ok(())
+        "@Deprecated items",
+        80,
+    )
 }
 
 /// Find @Suppress annotations
 pub fn cmd_suppress(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
-    let pattern = r"@Suppress";
-
-    let mut items: Vec<(String, usize, String)> = vec![];
-
-    search_files_limited(root, pattern, &["kt"], limit, |path, line_num, line| {
-        if let Some(q) = query
-            && !line.to_lowercase().contains(&q.to_lowercase())
-        {
-            return;
-        }
-
-        let rel_path = relative_path(root, path);
-        let content: String = line.trim().chars().take(80).collect();
-        items.push((rel_path, line_num, content));
-    })?;
-
-    println!(
-        "{}",
-        format!("@Suppress annotations ({}):", items.len()).bold()
-    );
-
-    for (path, line_num, content) in &items {
-        println!("  {}:{}", path.cyan(), line_num);
-        println!("    {}", content);
-    }
-
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
-    Ok(())
+    grep_and_print(
+        root,
+        r"@Suppress",
+        &["kt"],
+        query,
+        limit,
+        "@Suppress annotations",
+        80,
+    )
 }
 
 /// Find @Inject/@Autowired points for a type
@@ -652,7 +640,6 @@ pub fn cmd_inject(root: &Path, type_name: &str, limit: usize) -> Result<()> {
 
 /// Find uses of specific annotation
 pub fn cmd_annotations(root: &Path, annotation: &str, limit: usize) -> Result<()> {
-    let start = Instant::now();
     // Normalize annotation (add @ if missing for Java/Kotlin/Swift/ObjC)
     // For Perl, attributes are like :lvalue, :method
     let search_annotation = if annotation.starts_with('@') || annotation.starts_with(':') {
@@ -661,72 +648,32 @@ pub fn cmd_annotations(root: &Path, annotation: &str, limit: usize) -> Result<()
         format!("@{}", annotation)
     };
     let pattern = regex::escape(&search_annotation);
-
-    let mut items: Vec<(String, usize, String)> = vec![];
-
-    search_files_limited(
+    let label = format!("Classes with {}", search_annotation);
+    grep_and_print(
         root,
         &pattern,
         &["kt", "java", "swift", "m", "h", "pm", "pl", "t"],
+        None,
         limit,
-        |path, line_num, line| {
-            let rel_path = relative_path(root, path);
-            let content: String = line.trim().chars().take(80).collect();
-            items.push((rel_path, line_num, content));
-        },
-    )?;
-
-    println!(
-        "{}",
-        format!("Classes with {} ({}):", search_annotation, items.len()).bold()
-    );
-
-    for (path, line_num, content) in &items {
-        println!("  {}:{}", path.cyan(), line_num);
-        println!("    {}", content);
-    }
-
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
-    Ok(())
+        &label,
+        80,
+    )
 }
 
 /// Find deeplink definitions
 pub fn cmd_deeplinks(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
     // Search for specific deeplink patterns (NOT generic :// URLs)
     // Android: @DeepLink, DeepLinkHandler, @AppLink, NavDeepLink, intent-filter with android:scheme
     // iOS: openURL, application(_:open:, handleOpen, CFBundleURLSchemes, UniversalLink
-    let pattern = r#"[Dd]eep[Ll]ink|@DeepLink|DeepLinkHandler|@AppLink|NavDeepLink|android:scheme|openURL|application\([^)]*open:|handleOpen|CFBundleURLSchemes|UniversalLink|NSUserActivity"#;
-
-    let mut items: Vec<(String, usize, String)> = vec![];
-
-    search_files_limited(
+    grep_and_print(
         root,
-        pattern,
+        r#"[Dd]eep[Ll]ink|@DeepLink|DeepLinkHandler|@AppLink|NavDeepLink|android:scheme|openURL|application\([^)]*open:|handleOpen|CFBundleURLSchemes|UniversalLink|NSUserActivity"#,
         &["kt", "java", "xml", "swift", "m", "h", "plist"],
+        query,
         limit,
-        |path, line_num, line| {
-            if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase())
-            {
-                return;
-            }
-
-            let rel_path = relative_path(root, path);
-            let content: String = line.trim().chars().take(100).collect();
-            items.push((rel_path, line_num, content));
-        },
-    )?;
-
-    println!("{}", format!("Deeplinks ({}):", items.len()).bold());
-
-    for (path, line_num, content) in &items {
-        println!("  {}:{}", path.cyan(), line_num);
-        println!("    {}", content);
-    }
-
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
-    Ok(())
+        "Deeplinks",
+        100,
+    )
 }
 
 /// Find extension functions/types

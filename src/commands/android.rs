@@ -18,15 +18,10 @@ use crate::db;
 pub fn cmd_xml_usages(root: &Path, class_name: &str, module_filter: Option<&str>) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     // Check if XML usages are indexed
     let xml_count: i64 = conn.query_row("SELECT COUNT(*) FROM xml_usages", [], |row| row.get(0))?;
@@ -126,15 +121,10 @@ pub fn cmd_resource_usages(
 ) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     // Check if resources are indexed
     let res_count: i64 = conn.query_row("SELECT COUNT(*) FROM resources", [], |row| row.get(0))?;
