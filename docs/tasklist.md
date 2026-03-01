@@ -8,12 +8,12 @@
 |-------|--------|----------|
 | 1. Project Detection | ✅ Complete | 4/4 |
 | 2. Module & Dependency Support | ✅ Complete | 4/4 |
-| 3. Claude Code Plugin Integration | 🔄 In Progress | 0/4 |
+| 3. Claude Code Plugin Integration | ✅ Complete | 4/4 |
 | 4. Testing & Verification | ⬜ Not Started | 0/4 |
 
 **Legend:** ⬜ Not Started | 🔄 In Progress | ✅ Complete | ⏸️ Blocked
 
-**Current Phase:** 3
+**Current Phase:** 4
 **Last Updated:** 2026-03-01
 
 ---
@@ -48,10 +48,10 @@
 
 **Goal:** Provide a `initialize-flutter` plugin command with Flutter-specific rules and slash commands.
 
-- [ ] 3.1 Create `plugin/commands/initialize-flutter.md` — document Flutter project setup steps, recommended `CLAUDE.md` snippets, and common `ast-index` invocations for Flutter codebases
-- [ ] 3.2 Add Flutter-specific search rules to the plugin command (e.g. widget class detection, provider/bloc pattern hints)
-- [ ] 3.3 Add Flutter-specific slash command examples (e.g. `ast-index search --kind Class --lang dart`)
-- [ ] 3.4 Verify `plugin/SKILL.md` (or equivalent index) references the new `initialize-flutter` command
+- [x] 3.1 Create `plugin/commands/initialize-flutter.md` — document Flutter project setup steps, recommended `CLAUDE.md` snippets, and common `ast-index` invocations for Flutter codebases
+- [x] 3.2 Add Flutter-specific search rules to the plugin command (e.g. widget class detection, provider/bloc pattern hints)
+- [x] 3.3 Add Flutter-specific slash command examples (e.g. `ast-index search --kind Class --lang dart`)
+- [x] 3.4 Verify `plugin/SKILL.md` (or equivalent index) references the new `initialize-flutter` command
 
 **Test:** The `initialize-flutter` command file is present and loadable; content covers Flutter project conventions.
 
