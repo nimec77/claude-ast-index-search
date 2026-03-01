@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.24.0] - 2026-03-01
+
 - **`initialize-flutter` plugin command** — new `plugin/commands/initialize-flutter.md` command configures ast-index for Dart/Flutter projects; sets up `.claude/settings.json` and `.claude/rules/ast-index.md` with Flutter-specific search rules (widget detection, BLoC/Provider/Cubit pattern hints) and a 10-row Flutter/Dart-Specific Commands table covering StatelessWidget, StatefulWidget, BLoC, ChangeNotifier, Cubit, mixins, extensions, widget hierarchy, Navigator usages, and project map; verify step uses `ast-index search "Widget"`; optional Flutter Project Detection section checks for BLoC, Provider, and Riverpod patterns.
 
 ## [3.23.0] - 2026-03-01
