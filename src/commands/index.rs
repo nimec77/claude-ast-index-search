@@ -30,15 +30,10 @@ pub fn cmd_search(
 ) -> Result<()> {
     let total_start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     // 1. Search in file paths (index)
     let files_start = Instant::now();
@@ -189,15 +184,10 @@ pub fn cmd_symbol(
 ) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
     let symbols = if fuzzy && kind.is_none() {
         db::search_symbols_fuzzy(&conn, name, limit)?
     } else {
@@ -242,15 +232,10 @@ pub fn cmd_class(
 ) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     // Single query for all class-like symbols
     let results = if fuzzy {
@@ -305,15 +290,10 @@ pub fn cmd_implementations(
 ) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
     let impls = if scope.is_empty() {
         db::find_implementations(&conn, parent, limit)?
     } else {
@@ -360,15 +340,10 @@ pub fn cmd_implementations(
 pub fn cmd_refs(root: &Path, symbol: &str, limit: usize, format: &str) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
     let (definitions, imports, usages) = db::find_cross_references(&conn, symbol, limit)?;
 
     if format == "json" {
@@ -423,15 +398,10 @@ pub fn cmd_refs(root: &Path, symbol: &str, limit: usize, format: &str) -> Result
 pub fn cmd_hierarchy(root: &Path, name: &str) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     // Find the class/interface/package
     let classes = db::find_symbols_by_name(&conn, name, Some("class"), 1)?;

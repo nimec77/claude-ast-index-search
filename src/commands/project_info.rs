@@ -194,15 +194,10 @@ pub fn cmd_map(
 ) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
     let stats = db::get_stats(&conn)?;
     let project_type = detect_project_type(&conn);
 
@@ -720,15 +715,10 @@ const ARCH_PATTERNS: &[(&[&str], &str)] = &[
 pub fn cmd_conventions(root: &Path, format: &str) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     // A. Naming patterns — suffix counts from symbols
     let mut naming: Vec<NamingPattern> = Vec::new();

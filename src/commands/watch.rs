@@ -13,11 +13,7 @@ use crate::{db, indexer, parsers};
 
 /// Watch for file changes and incrementally update the index
 pub fn cmd_watch(root: &Path) -> Result<()> {
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
+    if db::open_db_or_warn(root)?.is_none() {
         return Ok(());
     }
 

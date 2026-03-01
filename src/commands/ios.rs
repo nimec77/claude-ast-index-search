@@ -23,15 +23,10 @@ use crate::db;
 pub fn cmd_storyboard_usages(root: &Path, class_name: &str, module: Option<&str>) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     let query = if let Some(m) = module {
         format!(
@@ -118,15 +113,10 @@ pub fn cmd_asset_usages(
 ) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     if unused {
         // Find unused assets

@@ -64,94 +64,13 @@ pub fn relative_path(root: &Path, path: &Path) -> String {
         .to_string()
 }
 
-/// Fast parallel file search using grep-searcher and ignore crates
-pub fn search_files<F>(
-    root: &Path,
-    pattern: &str,
-    extensions: &[&str],
-    mut handler: F,
-) -> Result<()>
+/// Fast parallel file search using grep-searcher and ignore crates.
+/// Delegates to `search_files_limited` with no effective limit.
+pub fn search_files<F>(root: &Path, pattern: &str, extensions: &[&str], handler: F) -> Result<()>
 where
     F: FnMut(&Path, usize, &str),
 {
-    let matcher = RegexMatcher::new(pattern).context("Invalid regex pattern")?;
-    let no_ignore = is_no_ignore_enabled(root);
-    let use_git = crate::indexer::has_git_repo(root) && !no_ignore;
-    let arc_root = if no_ignore {
-        None
-    } else {
-        crate::indexer::find_arc_root(root)
-    };
-
-    let mut wb = WalkBuilder::new(root);
-    wb.hidden(true)
-        .git_ignore(use_git)
-        .git_exclude(use_git)
-        .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry))
-        .threads(num_cpus());
-    if let Some(ref arc) = arc_root {
-        wb.add_custom_ignore_filename(".gitignore");
-        wb.add_custom_ignore_filename(".arcignore");
-        let root_gitignore = arc.join(".gitignore");
-        if root_gitignore.exists() {
-            wb.add_ignore(root_gitignore);
-        }
-    }
-    let walker = wb.build_parallel();
-
-    // Use crossbeam for faster channel (bounded to prevent memory bloat)
-    let (tx, rx) = channel::bounded::<(Arc<Path>, usize, String)>(10000);
-
-    // Use HashSet for O(1) extension lookup instead of O(n) linear search
-    let extensions: Arc<HashSet<String>> =
-        Arc::new(extensions.iter().map(|s| s.to_string()).collect());
-
-    walker.run(|| {
-        let tx = tx.clone();
-        let matcher = matcher.clone();
-        let extensions = Arc::clone(&extensions);
-
-        // Create optimized searcher ONCE per thread (not per file!)
-        // SAFETY: memory-mapped files are safe when files aren't modified during search
-        let mut searcher = SearcherBuilder::new()
-            .memory_map(unsafe { MmapChoice::auto() })
-            .line_number(true)
-            .build();
-
-        Box::new(move |entry| {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if let Some(ext) = path.extension() {
-                    // Fast O(1) HashSet lookup
-                    if extensions.contains(ext.to_str().unwrap_or("")) {
-                        let path_arc: Arc<Path> = Arc::from(path);
-
-                        let _ = searcher.search_path(
-                            &matcher,
-                            path,
-                            UTF8(|line_num, line| {
-                                let _ = tx.send((
-                                    Arc::clone(&path_arc),
-                                    line_num as usize,
-                                    line.trim_end().to_string(),
-                                ));
-                                Ok(true)
-                            }),
-                        );
-                    }
-                }
-            }
-            ignore::WalkState::Continue
-        })
-    });
-
-    drop(tx);
-
-    for (path, line_num, line) in rx {
-        handler(&path, line_num, &line);
-    }
-
-    Ok(())
+    search_files_limited(root, pattern, extensions, usize::MAX, handler)
 }
 
 /// Fast parallel file search with early termination support
@@ -180,17 +99,10 @@ where
         .git_exclude(use_git)
         .filter_entry(|entry| !crate::indexer::is_excluded_dir(entry))
         .threads(num_cpus());
-    if let Some(ref arc) = arc_root {
-        wb.add_custom_ignore_filename(".gitignore");
-        wb.add_custom_ignore_filename(".arcignore");
-        let root_gitignore = arc.join(".gitignore");
-        if root_gitignore.exists() {
-            wb.add_ignore(root_gitignore);
-        }
-    }
+    crate::indexer::configure_walk_ignores(&mut wb, arc_root.as_deref());
     let walker = wb.build_parallel();
 
-    let (tx, rx) = channel::bounded::<(Arc<Path>, usize, String)>(limit.max(1000));
+    let (tx, rx) = channel::bounded::<(Arc<Path>, usize, String)>(limit.clamp(1_000, 10_000));
 
     let extensions: Arc<HashSet<String>> =
         Arc::new(extensions.iter().map(|s| s.to_string()).collect());

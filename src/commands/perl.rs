@@ -15,209 +15,128 @@ use colored::Colorize;
 
 use super::{relative_path, search_files_limited};
 
-/// Find Perl @EXPORT and @EXPORT_OK definitions
-pub fn cmd_perl_exports(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
+/// Search files for a pattern and print results in the standard two-line format.
+///
+/// For each match the query filter (if any) is applied, then the optional
+/// `extra_filter` predicate. Results are printed as:
+///   label (N):
+///     path:line_num
+///       content (truncated to truncate_len)
+// Extra_filter is the 8th argument; all are required to avoid a struct wrapper for this helper.
+#[allow(clippy::too_many_arguments)]
+fn grep_and_print(
+    root: &Path,
+    pattern: &str,
+    extensions: &[&str],
+    query: Option<&str>,
+    limit: usize,
+    label: &str,
+    truncate_len: usize,
+    extra_filter: impl Fn(&str) -> bool,
+) -> Result<()> {
     let start = Instant::now();
-
-    // Search for @EXPORT and @EXPORT_OK definitions
-    let pattern = r"our\s+@EXPORT|our\s+@EXPORT_OK|@EXPORT\s*=|@EXPORT_OK\s*=";
-
     let mut results: Vec<(String, usize, String)> = vec![];
 
-    search_files_limited(root, pattern, &["pm"], limit, |path, line_num, line| {
+    search_files_limited(root, pattern, extensions, limit, |path, line_num, line| {
+        if !extra_filter(line) {
+            return;
+        }
         if let Some(q) = query
             && !line.to_lowercase().contains(&q.to_lowercase())
         {
             return;
         }
-
         let rel_path = relative_path(root, path);
-        let content: String = line.trim().chars().take(100).collect();
+        let content: String = line.trim().chars().take(truncate_len).collect();
         results.push((rel_path, line_num, content));
     })?;
 
-    println!("{}", format!("Perl exports ({}):", results.len()).bold());
-
+    println!("{}", format!("{} ({}):", label, results.len()).bold());
     for (path, line_num, content) in &results {
         println!("  {}:{}", path.cyan(), line_num);
         println!("    {}", content);
     }
-
     eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
+}
+
+/// Find Perl @EXPORT and @EXPORT_OK definitions
+pub fn cmd_perl_exports(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
+    grep_and_print(
+        root,
+        r"our\s+@EXPORT|our\s+@EXPORT_OK|@EXPORT\s*=|@EXPORT_OK\s*=",
+        &["pm"],
+        query,
+        limit,
+        "Perl exports",
+        100,
+        |_| true,
+    )
 }
 
 /// Find Perl subroutine definitions
 pub fn cmd_perl_subs(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
-
-    // Search for sub definitions
-    let pattern = r"^\s*sub\s+\w+";
-
-    let mut results: Vec<(String, usize, String)> = vec![];
-
-    search_files_limited(
+    grep_and_print(
         root,
-        pattern,
+        r"^\s*sub\s+\w+",
         &["pm", "pl", "t"],
+        query,
         limit,
-        |path, line_num, line| {
-            if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase())
-            {
-                return;
-            }
-
-            let rel_path = relative_path(root, path);
-            let content: String = line.trim().chars().take(80).collect();
-            results.push((rel_path, line_num, content));
-        },
-    )?;
-
-    println!(
-        "{}",
-        format!("Perl subroutines ({}):", results.len()).bold()
-    );
-
-    for (path, line_num, content) in &results {
-        println!("  {}:{}", path.cyan(), line_num);
-        println!("    {}", content);
-    }
-
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
-    Ok(())
+        "Perl subroutines",
+        80,
+        |_| true,
+    )
 }
 
 /// Find POD documentation sections
 pub fn cmd_perl_pod(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
-
-    // Search for POD documentation sections
-    // =head1, =head2, =head3, =head4, =item, =over, =back, =pod, =cut, =begin, =end
-    let pattern = r"^=(head[1-4]|item|over|back|pod|cut|begin|end|for)\b";
-
-    let mut results: Vec<(String, usize, String)> = vec![];
-
-    search_files_limited(
+    grep_and_print(
         root,
-        pattern,
+        r"^=(head[1-4]|item|over|back|pod|cut|begin|end|for)\b",
         &["pm", "pl", "pod"],
+        query,
         limit,
-        |path, line_num, line| {
-            if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase())
-            {
-                return;
-            }
-
-            let rel_path = relative_path(root, path);
-            let content: String = line.trim().chars().take(100).collect();
-            results.push((rel_path, line_num, content));
-        },
-    )?;
-
-    println!(
-        "{}",
-        format!("POD documentation ({}):", results.len()).bold()
-    );
-
-    for (path, line_num, content) in &results {
-        println!("  {}:{}", path.cyan(), line_num);
-        println!("    {}", content);
-    }
-
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
-    Ok(())
+        "POD documentation",
+        100,
+        |_| true,
+    )
 }
 
 /// Find Perl test assertions (Test::More, Test::Simple)
 pub fn cmd_perl_tests(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
-
-    // Search for Test::More and Test::Simple assertions
-    // ok(), is(), isnt(), like(), unlike(), cmp_ok(), is_deeply(), diag(), pass(), fail()
-    // subtest, plan, done_testing, SKIP, TODO
-    let pattern = r"\b(ok|is|isnt|like|unlike|cmp_ok|is_deeply|diag|pass|fail|subtest|plan|done_testing|SKIP|TODO)\s*[\(\{]";
-
-    let mut results: Vec<(String, usize, String)> = vec![];
-
-    search_files_limited(
+    grep_and_print(
         root,
-        pattern,
+        r"\b(ok|is|isnt|like|unlike|cmp_ok|is_deeply|diag|pass|fail|subtest|plan|done_testing|SKIP|TODO)\s*[\(\{]",
         &["t", "pm", "pl"],
+        query,
         limit,
-        |path, line_num, line| {
-            if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase())
-            {
-                return;
-            }
-
-            let rel_path = relative_path(root, path);
-            let content: String = line.trim().chars().take(100).collect();
-            results.push((rel_path, line_num, content));
-        },
-    )?;
-
-    println!("{}", format!("Perl tests ({}):", results.len()).bold());
-
-    for (path, line_num, content) in &results {
-        println!("  {}:{}", path.cyan(), line_num);
-        println!("    {}", content);
-    }
-
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
-    Ok(())
+        "Perl tests",
+        100,
+        |_| true,
+    )
 }
 
 /// Find Perl use/require statements
 pub fn cmd_perl_imports(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
-
-    // Search for use/require statements
-    let pattern = r"^\s*(use|require)\s+[A-Za-z]";
-
-    let mut results: Vec<(String, usize, String)> = vec![];
-
-    search_files_limited(
+    grep_and_print(
         root,
-        pattern,
+        r"^\s*(use|require)\s+[A-Za-z]",
         &["pm", "pl", "t"],
+        query,
         limit,
-        |path, line_num, line| {
+        "Perl imports",
+        100,
+        |line| {
             // Skip 'use strict', 'use warnings', 'use constant', 'use base', 'use parent'
             let trimmed = line.trim();
-            if trimmed.starts_with("use strict")
-                || trimmed.starts_with("use warnings")
-                || trimmed.starts_with("use constant")
-                || trimmed.starts_with("use base")
-                || trimmed.starts_with("use parent")
-                || trimmed.starts_with("use utf8")
-                || trimmed.starts_with("use v5")
-                || trimmed.starts_with("use 5.")
-            {
-                return;
-            }
-
-            if let Some(q) = query
-                && !line.to_lowercase().contains(&q.to_lowercase())
-            {
-                return;
-            }
-
-            let rel_path = relative_path(root, path);
-            let content: String = line.trim().chars().take(100).collect();
-            results.push((rel_path, line_num, content));
+            !trimmed.starts_with("use strict")
+                && !trimmed.starts_with("use warnings")
+                && !trimmed.starts_with("use constant")
+                && !trimmed.starts_with("use base")
+                && !trimmed.starts_with("use parent")
+                && !trimmed.starts_with("use utf8")
+                && !trimmed.starts_with("use v5")
+                && !trimmed.starts_with("use 5.")
         },
-    )?;
-
-    println!("{}", format!("Perl imports ({}):", results.len()).bold());
-
-    for (path, line_num, content) in &results {
-        println!("  {}:{}", path.cyan(), line_num);
-        println!("    {}", content);
-    }
-
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
-    Ok(())
+    )
 }

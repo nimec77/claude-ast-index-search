@@ -47,15 +47,10 @@ fn outline_via_treesitter(
 pub fn cmd_file(root: &Path, pattern: &str, _exact: bool, limit: usize) -> Result<()> {
     let start = Instant::now();
 
-    if !db::db_exists(root) {
-        println!(
-            "{}",
-            "Index not found. Run 'ast-index rebuild' first.".red()
-        );
-        return Ok(());
-    }
-
-    let conn = db::open_db(root)?;
+    let conn = match db::open_db_or_warn(root)? {
+        Some(c) => c,
+        None => return Ok(()),
+    };
 
     let search_pattern = pattern.to_string();
     let files = db::find_files(&conn, &search_pattern, limit)?;

@@ -39,8 +39,14 @@ cargo bench
 
 ### Key modules
 
-- **`src/indexer.rs`** — File discovery (respects `.gitignore`/`.arcignore`), parallel parsing with rayon in chunks of 500 files, writes to SQLite. Auto-detects `ProjectType` (`Android`, `IOS`, `Frontend`, `Go`, `Rust`, `Python`, `Perl`, `Bazel`, `Flutter`, `Mixed`, `Unknown`) from marker files and handles sub-project mode. Files >1 MB are skipped. `ModuleLookup` assigns files to modules via longest-prefix path matching.
-- **`src/db.rs`** — SQLite schema, `SymbolKind` enum, DB path (cache dir keyed by project root hash via djb2), `AST_INDEX_DB_PATH` env override. WAL mode + 5 s busy timeout + exclusive file lock (`index.db.lock`) prevent concurrent rebuild conflicts.
+- **`src/indexer.rs`** — Parent module: shared types (`ProjectType`, `ModuleLookup`, `WalkResult`, `ParsedFile`), constants (`MAX_FILE_SIZE=1MB`, `PARSE_CHUNK_SIZE=500`, `MAX_WALK_DEPTH=50`), helpers (`configure_walk_ignores`, `build_thread_pool`), and `pub use` re-exports of the full public API. Sub-modules under `src/indexer/`:
+  - **`files.rs`** — Directory walk (respects `.gitignore`/`.arcignore`), parallel parsing with rayon in chunks of 500 files, incremental updates, `write_batch_to_db`. Files >1 MB are skipped.
+  - **`modules.rs`** — Gradle/Maven/SPM/Flutter/Bazel module discovery and inter-module dependency indexing.
+  - **`resources.rs`** — Android XML layout/resource indexing, iOS storyboard/asset/package-manager indexing.
+  - **`node_modules.rs`** — TypeScript `.d.ts` declaration file indexing from `node_modules`.
+  - Auto-detects `ProjectType` (`Android`, `IOS`, `Frontend`, `Go`, `Rust`, `Python`, `Perl`, `Bazel`, `Flutter`, `Mixed`, `Unknown`) from marker files. `ModuleLookup` assigns files to modules via longest-prefix path matching.
+- **`src/db.rs`** — Parent module: SQLite schema, `SymbolKind` enum, `open_db_or_warn` (guard helper used by all command files), DB path (cache dir keyed by project root hash via djb2), `AST_INDEX_DB_PATH` env override, insert functions, `pub use queries::*` re-export. WAL mode + 5 s busy timeout + exclusive file lock (`index.db.lock`) prevent concurrent rebuild conflicts. Sub-module:
+  - **`src/db/queries.rs`** — All query types (`SearchResult`, `RefResult`, `SearchScope`, `DbStats`) and search/find functions. `SearchScope::empty()` is the constructor for no-scope queries.
 - **`src/parsers/`** — Two-tier parser system:
   - `treesitter/` — Tree-sitter AST parsers (primary, one per language), each implements `LanguageParser` trait. Registered in `treesitter/mod.rs::get_treesitter_parser()`.
   - `perl.rs`, `wsdl.rs` — Regex-based parsers for languages without tree-sitter support.
