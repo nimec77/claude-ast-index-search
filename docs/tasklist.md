@@ -7,13 +7,13 @@
 | Phase | Status | Progress |
 |-------|--------|----------|
 | 1. Project Detection | ✅ Complete | 4/4 |
-| 2. Module & Dependency Support | 🔄 In Progress | 2/4 |
-| 3. Claude Code Plugin Integration | ⬜ Not Started | 0/4 |
+| 2. Module & Dependency Support | ✅ Complete | 4/4 |
+| 3. Claude Code Plugin Integration | 🔄 In Progress | 0/4 |
 | 4. Testing & Verification | ⬜ Not Started | 0/4 |
 
 **Legend:** ⬜ Not Started | 🔄 In Progress | ✅ Complete | ⏸️ Blocked
 
-**Current Phase:** 2
+**Current Phase:** 3
 **Last Updated:** 2026-03-01
 
 ---
@@ -37,8 +37,8 @@
 
 - [x] 2.1 Add `pubspec.yaml` to `is_module_file()` in `src/indexer.rs` — treat it as the module descriptor for Flutter projects
 - [x] 2.2 Add `serde_yaml` to `Cargo.toml` and implement YAML parsing to extract `name:` field from `pubspec.yaml` in `index_modules_from_files()`
-- [ ] 2.3 Implement `index_module_dependencies()` for Flutter — parse `dependencies:` and `dev_dependencies:` sections from `pubspec.yaml` and write to the `module_deps` table
-- [ ] 2.4 Add unit tests for `pubspec.yaml` module name extraction and dependency parsing
+- [x] 2.3 Implement `index_module_dependencies()` for Flutter — parse `dependencies:` and `dev_dependencies:` sections from `pubspec.yaml` and write to the `module_deps` table
+- [x] 2.4 Add unit tests for `pubspec.yaml` module name extraction and dependency parsing
 
 **Test:** `ast-index modules` lists the Flutter module name; `ast-index deps` shows packages from `pubspec.yaml`.
 
