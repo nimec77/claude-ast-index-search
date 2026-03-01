@@ -6,14 +6,14 @@
 
 | Phase | Status | Progress |
 |-------|--------|----------|
-| 1. Project Detection | ⬜ Not Started | 0/4 |
+| 1. Project Detection | ✅ Complete | 4/4 |
 | 2. Module & Dependency Support | ⬜ Not Started | 0/4 |
 | 3. Claude Code Plugin Integration | ⬜ Not Started | 0/4 |
 | 4. Testing & Verification | ⬜ Not Started | 0/4 |
 
 **Legend:** ⬜ Not Started | 🔄 In Progress | ✅ Complete | ⏸️ Blocked
 
-**Current Phase:** 1
+**Current Phase:** 2
 **Last Updated:** 2026-03-01
 
 ---
@@ -22,10 +22,10 @@
 
 **Goal:** `ast-index` correctly identifies Flutter projects and roots.
 
-- [ ] 1.1 Add `Flutter` variant to `ProjectType` enum in `src/indexer.rs`
-- [ ] 1.2 Add `pubspec.yaml` detection to `detect_project_type()` in `src/indexer.rs` — return `ProjectType::Flutter` when present
-- [ ] 1.3 Update `find_project_root()` in `src/indexer.rs` and `src/main.rs` — walk up to the directory containing `pubspec.yaml`
-- [ ] 1.4 Update `has_build_marker()` in `src/indexer.rs` — return `true` for `pubspec.yaml` when `ProjectType` is `Flutter`
+- [x] 1.1 Add `Flutter` variant to `ProjectType` enum in `src/indexer.rs`
+- [x] 1.2 Add `pubspec.yaml` detection to `detect_project_type()` in `src/indexer.rs` — return `ProjectType::Flutter` when present
+- [x] 1.3 Update `find_project_root()` in `src/indexer.rs` and `src/main.rs` — walk up to the directory containing `pubspec.yaml`
+- [x] 1.4 Update `has_build_marker()` in `src/indexer.rs` — return `true` for `pubspec.yaml` when `ProjectType` is `Flutter`
 
 **Test:** Running `ast-index index` in a Flutter project root detects `ProjectType::Flutter`.
 
