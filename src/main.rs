@@ -1027,6 +1027,10 @@ fn find_project_root() -> Result<PathBuf> {
                 }
             }
         }
+        // Flutter markers
+        if ancestor.join("pubspec.yaml").exists() {
+            return Ok(ancestor.to_path_buf());
+        }
         // Bazel markers
         if ancestor.join("WORKSPACE").exists()
             || ancestor.join("WORKSPACE.bazel").exists()
