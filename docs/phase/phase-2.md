@@ -6,8 +6,8 @@
 
 - [x] 2.1 Add `pubspec.yaml` to `is_module_file()` in `src/indexer.rs` — treat it as the module descriptor for Flutter projects
 - [x] 2.2 Add `serde_yaml` to `Cargo.toml` and implement YAML parsing to extract `name:` field from `pubspec.yaml` in `index_modules_from_files()`
-- [ ] 2.3 Implement `index_module_dependencies()` for Flutter — parse `dependencies:` and `dev_dependencies:` sections from `pubspec.yaml` and write to the `module_deps` table
-- [ ] 2.4 Add unit tests for `pubspec.yaml` module name extraction and dependency parsing
+- [x] 2.3 Implement `index_module_dependencies()` for Flutter — parse `dependencies:` and `dev_dependencies:` sections from `pubspec.yaml` and write to the `module_deps` table
+- [x] 2.4 Add unit tests for `pubspec.yaml` module name extraction and dependency parsing
 
 ## Acceptance Criteria
 

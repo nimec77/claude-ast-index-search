@@ -1172,17 +1172,26 @@ pub fn index_module_dependencies(
     let gradle_project_re = &*GRADLE_PROJECT_RE;
 
     // First, ensure all modules are indexed and get their IDs
-    let module_ids: std::collections::HashMap<String, i64> = {
-        let mut stmt = conn.prepare("SELECT id, name FROM modules")?;
+    let (module_ids, module_ids_by_path): (
+        std::collections::HashMap<String, i64>,
+        std::collections::HashMap<String, i64>,
+    ) = {
+        let mut stmt = conn.prepare("SELECT id, name, path FROM modules")?;
         let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(1)?, row.get::<_, i64>(0)?))
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
         })?;
-        let mut map = std::collections::HashMap::new();
+        let mut by_name = std::collections::HashMap::new();
+        let mut by_path = std::collections::HashMap::new();
         for row in rows {
-            let (name, id) = row?;
-            map.insert(name, id);
+            let (id, name, path) = row?;
+            by_name.insert(name, id);
+            by_path.insert(path, id);
         }
-        map
+        (by_name, by_path)
     };
 
     if progress {
@@ -1210,64 +1219,112 @@ pub fn index_module_dependencies(
         let maven_dep_re = &*MAVEN_DEP_RE;
 
         for path in gradle_files {
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
             if let Some(parent) = path.parent() {
                 let module_path = parent
                     .strip_prefix(root)
                     .unwrap_or(parent)
                     .to_string_lossy()
                     .to_string();
-                let module_name = module_path.replace('/', ".");
 
-                if let Some(&module_id) = module_ids.get(&module_name) {
-                    // Read build file content
-                    if let Ok(content) = fs::read_to_string(path) {
-                        let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                // Flutter dependencies (pubspec.yaml)
+                if file_name == "pubspec.yaml" {
+                    if let Some(&module_id) = module_ids_by_path.get(&module_path)
+                        && let Ok(content) = fs::read_to_string(path)
+                    {
+                        #[derive(serde::Deserialize)]
+                        struct PubSpecDeps {
+                            dependencies: Option<serde_yaml_ng::Mapping>,
+                            dev_dependencies: Option<serde_yaml_ng::Mapping>,
+                        }
+                        if let Ok(pubspec) = serde_yaml_ng::from_str::<PubSpecDeps>(&content) {
+                            let dep_sections = [
+                                (pubspec.dependencies, "dependency"),
+                                (pubspec.dev_dependencies, "dev_dependency"),
+                            ];
+                            for (section, dep_kind) in dep_sections {
+                                if let Some(deps) = section {
+                                    for (key, _) in &deps {
+                                        if let Some(pkg_name) = key.as_str() {
+                                            if pkg_name.is_empty() {
+                                                continue;
+                                            }
+                                            // Insert the dep package as a module if not present
+                                            tx.execute(
+                                                "INSERT OR IGNORE INTO modules (name, path) VALUES (?1, ?2)",
+                                                rusqlite::params![pkg_name, ""],
+                                            )?;
+                                            let dep_id: i64 = tx.query_row(
+                                                "SELECT id FROM modules WHERE name = ?1",
+                                                rusqlite::params![pkg_name],
+                                                |row| row.get(0),
+                                            )?;
+                                            dep_stmt.execute(rusqlite::params![
+                                                module_id, dep_id, dep_kind
+                                            ])?;
+                                            dep_count += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let module_name = module_path.replace('/', ".");
 
-                        if file_name == "pom.xml" {
-                            // Maven dependencies
-                            for caps in maven_dep_re.captures_iter(&content) {
-                                let artifact_id = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                                // Check if this artifactId matches a known module
-                                for (mod_name, &mod_id) in &module_ids {
-                                    // Match by last segment (artifactId typically matches the module name)
-                                    let last_segment =
-                                        mod_name.rsplit('.').next().unwrap_or(mod_name);
-                                    if last_segment == artifact_id {
+                    if let Some(&module_id) = module_ids.get(&module_name) {
+                        // Read build file content
+                        if let Ok(content) = fs::read_to_string(path) {
+                            if file_name == "pom.xml" {
+                                // Maven dependencies
+                                for caps in maven_dep_re.captures_iter(&content) {
+                                    let artifact_id = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                                    // Check if this artifactId matches a known module
+                                    for (mod_name, &mod_id) in &module_ids {
+                                        // Match by last segment (artifactId typically matches the module name)
+                                        let last_segment =
+                                            mod_name.rsplit('.').next().unwrap_or(mod_name);
+                                        if last_segment == artifact_id {
+                                            dep_stmt.execute(rusqlite::params![
+                                                module_id, mod_id, "compile"
+                                            ])?;
+                                            dep_count += 1;
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Gradle dependencies
+                                // Parse projects DSL style dependencies
+                                for caps in projects_dep_re.captures_iter(&content) {
+                                    let dep_kind =
+                                        caps.get(1).map(|m| m.as_str()).unwrap_or("implementation");
+                                    let dep_name = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+
+                                    if let Some(&dep_id) = module_ids.get(dep_name) {
                                         dep_stmt.execute(rusqlite::params![
-                                            module_id, mod_id, "compile"
+                                            module_id, dep_id, dep_kind
                                         ])?;
                                         dep_count += 1;
                                     }
                                 }
-                            }
-                        } else {
-                            // Gradle dependencies
-                            // Parse projects DSL style dependencies
-                            for caps in projects_dep_re.captures_iter(&content) {
-                                let dep_kind =
-                                    caps.get(1).map(|m| m.as_str()).unwrap_or("implementation");
-                                let dep_name = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-                                if let Some(&dep_id) = module_ids.get(dep_name) {
-                                    dep_stmt
-                                        .execute(rusqlite::params![module_id, dep_id, dep_kind])?;
-                                    dep_count += 1;
-                                }
-                            }
+                                // Parse standard Gradle style dependencies
+                                for caps in gradle_project_re.captures_iter(&content) {
+                                    let dep_kind =
+                                        caps.get(1).map(|m| m.as_str()).unwrap_or("implementation");
+                                    let dep_path = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-                            // Parse standard Gradle style dependencies
-                            for caps in gradle_project_re.captures_iter(&content) {
-                                let dep_kind =
-                                    caps.get(1).map(|m| m.as_str()).unwrap_or("implementation");
-                                let dep_path = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+                                    // Convert :features:payments:api to features.payments.api
+                                    let dep_name =
+                                        dep_path.trim_start_matches(':').replace(':', ".");
 
-                                // Convert :features:payments:api to features.payments.api
-                                let dep_name = dep_path.trim_start_matches(':').replace(':', ".");
-
-                                if let Some(&dep_id) = module_ids.get(&dep_name) {
-                                    dep_stmt
-                                        .execute(rusqlite::params![module_id, dep_id, dep_kind])?;
-                                    dep_count += 1;
+                                    if let Some(&dep_id) = module_ids.get(&dep_name) {
+                                        dep_stmt.execute(rusqlite::params![
+                                            module_id, dep_id, dep_kind
+                                        ])?;
+                                        dep_count += 1;
+                                    }
                                 }
                             }
                         }
@@ -2779,5 +2836,157 @@ dev_dependencies:
         let names: Vec<&str> = rows.iter().map(|(n, _)| n.as_str()).collect();
         assert!(names.contains(&"app"));
         assert!(names.contains(&"my_app"));
+    }
+
+    // Helper: create an in-memory SQLite DB with modules + module_deps tables.
+    fn make_deps_db() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE modules (
+                id   INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                path TEXT NOT NULL,
+                kind TEXT
+            );
+            CREATE TABLE module_deps (
+                id           INTEGER PRIMARY KEY,
+                module_id    INTEGER NOT NULL,
+                dep_module_id INTEGER NOT NULL,
+                dep_kind     TEXT,
+                FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE,
+                FOREIGN KEY (dep_module_id) REFERENCES modules(id) ON DELETE CASCADE
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    // Helper: query all (source_name, dep_name, dep_kind) rows from module_deps.
+    fn query_deps(conn: &rusqlite::Connection) -> Vec<(String, String, String)> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT m1.name, m2.name, md.dep_kind
+                 FROM module_deps md
+                 JOIN modules m1 ON md.module_id = m1.id
+                 JOIN modules m2 ON md.dep_module_id = m2.id
+                 ORDER BY m1.name, md.dep_kind, m2.name",
+            )
+            .unwrap();
+        stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn test_pubspec_deps_basic_dependency_extraction() {
+        let dir = TempDir::new().unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(
+            &pubspec,
+            r#"name: my_app
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^0.13.0
+"#,
+        )
+        .unwrap();
+
+        let mut conn = make_deps_db();
+        // Pre-insert the Flutter module so index_module_dependencies can find it by path.
+        conn.execute("INSERT INTO modules (name, path) VALUES ('my_app', '')", [])
+            .unwrap();
+
+        let count = index_module_dependencies(&mut conn, dir.path(), &[pubspec], false).unwrap();
+
+        assert_eq!(count, 2);
+        let deps = query_deps(&conn);
+        assert_eq!(deps.len(), 2);
+        let dep_names: Vec<&str> = deps.iter().map(|(_, d, _)| d.as_str()).collect();
+        assert!(dep_names.contains(&"flutter"));
+        assert!(dep_names.contains(&"http"));
+        // All are "dependency" kind
+        assert!(deps.iter().all(|(_, _, k)| k == "dependency"));
+    }
+
+    #[test]
+    fn test_pubspec_deps_dev_dependencies_indexed() {
+        let dir = TempDir::new().unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(
+            &pubspec,
+            r#"name: my_app
+dependencies:
+  http: ^0.13.0
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mockito: ^5.0.0
+"#,
+        )
+        .unwrap();
+
+        let mut conn = make_deps_db();
+        conn.execute("INSERT INTO modules (name, path) VALUES ('my_app', '')", [])
+            .unwrap();
+
+        let count = index_module_dependencies(&mut conn, dir.path(), &[pubspec], false).unwrap();
+
+        // 1 dependency + 2 dev_dependencies
+        assert_eq!(count, 3);
+        let deps = query_deps(&conn);
+        let dep_kinds: Vec<(&str, &str)> = deps
+            .iter()
+            .map(|(_, d, k)| (d.as_str(), k.as_str()))
+            .collect();
+        assert!(dep_kinds.contains(&("http", "dependency")));
+        assert!(dep_kinds.contains(&("flutter_test", "dev_dependency")));
+        assert!(dep_kinds.contains(&("mockito", "dev_dependency")));
+    }
+
+    #[test]
+    fn test_pubspec_deps_missing_dependencies_section_no_rows() {
+        let dir = TempDir::new().unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(
+            &pubspec,
+            r#"name: my_app
+version: 1.0.0
+description: No deps here
+"#,
+        )
+        .unwrap();
+
+        let mut conn = make_deps_db();
+        conn.execute("INSERT INTO modules (name, path) VALUES ('my_app', '')", [])
+            .unwrap();
+
+        let count = index_module_dependencies(&mut conn, dir.path(), &[pubspec], false).unwrap();
+
+        assert_eq!(count, 0);
+        assert!(query_deps(&conn).is_empty());
+    }
+
+    #[test]
+    fn test_pubspec_deps_malformed_yaml_silently_skipped() {
+        let dir = TempDir::new().unwrap();
+        let pubspec = dir.path().join("pubspec.yaml");
+        fs::write(
+            &pubspec,
+            "name: [unclosed bracket\ndependencies:\n  foo: bar\n",
+        )
+        .unwrap();
+
+        let mut conn = make_deps_db();
+        conn.execute("INSERT INTO modules (name, path) VALUES ('my_app', '')", [])
+            .unwrap();
+
+        let result = index_module_dependencies(&mut conn, dir.path(), &[pubspec], false);
+
+        // Must not error out; no deps inserted
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+        assert!(query_deps(&conn).is_empty());
     }
 }
