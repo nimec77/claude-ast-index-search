@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.23.0] - 2026-03-01
+
 - **Flutter module indexing** — `ast-index modules` now lists Flutter packages by extracting the `name:` field from `pubspec.yaml`; `serde_yaml` added for YAML parsing; malformed YAML, missing `name:` fields, and empty names are silently skipped; `INSERT OR IGNORE` prevents duplicate module entries in monorepos.
 
 ## [3.22.0] - 2026-03-01
