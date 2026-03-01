@@ -1112,7 +1112,7 @@ pub fn index_modules_from_files(
                     struct PubSpec {
                         name: Option<String>,
                     }
-                    if let Ok(pubspec) = serde_yaml::from_str::<PubSpec>(&content)
+                    if let Ok(pubspec) = serde_yaml_ng::from_str::<PubSpec>(&content)
                         && let Some(ref mod_name) = pubspec.name
                         && !mod_name.is_empty()
                     {
