@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, line_text, node_line, node_text, parse_tree};
+use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -338,14 +338,6 @@ fn is_significant_decorator(name: &str) -> bool {
         || name.contains("fixture")
         || name.contains("dataclass")
         || name.contains("property")
-}
-
-fn find_capture<'a>(
-    m: &'a tree_sitter::QueryMatch<'a, 'a>,
-    idx: Option<u32>,
-) -> Option<&'a tree_sitter::QueryCapture<'a>> {
-    let idx = idx?;
-    m.captures.iter().find(|c| c.index == idx)
 }
 
 #[cfg(test)]

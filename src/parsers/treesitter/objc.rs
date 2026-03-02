@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, line_text, node_text, parse_tree};
+use super::{LanguageParser, find_capture, line_text, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -508,15 +508,6 @@ fn extract_typedef_name_from_text(content: &str, node: &Node) -> Option<String> 
     text.rsplit_once(|c: char| c.is_whitespace() || c == '}' || c == '*')
         .map(|(_, name)| name.trim().to_string())
         .filter(|n| !n.is_empty() && n.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false))
-}
-
-/// Find a capture by index in a match
-fn find_capture<'a>(
-    m: &'a tree_sitter::QueryMatch<'a, 'a>,
-    idx: Option<u32>,
-) -> Option<&'a tree_sitter::QueryCapture<'a>> {
-    let idx = idx?;
-    m.captures.iter().find(|c| c.index == idx)
 }
 
 #[cfg(test)]

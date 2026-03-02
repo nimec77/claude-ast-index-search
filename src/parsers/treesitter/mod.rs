@@ -90,3 +90,12 @@ fn node_line(node: &tree_sitter::Node) -> usize {
 fn line_text(content: &str, line: usize) -> &str {
     content.lines().nth(line - 1).unwrap_or("")
 }
+
+/// Find a capture by index in a query match
+pub(crate) fn find_capture<'a>(
+    m: &'a tree_sitter::QueryMatch<'a, 'a>,
+    idx: Option<u32>,
+) -> Option<&'a tree_sitter::QueryCapture<'a>> {
+    let idx = idx?;
+    m.captures.iter().find(|c| c.index == idx)
+}
