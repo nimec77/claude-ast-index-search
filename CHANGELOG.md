@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+- **Rust 2018+ module layout** — converted three `mod.rs` files to file-based modules (`src/commands.rs`, `src/parsers.rs`, `src/parsers/treesitter.rs`); no behavioral changes.
+
 ## [3.27.0] - 2026-03-02
 
 - **Phase 6 large module decomposition (CS-6-6)** -- structural cleanup with zero behavioral changes: extracted inline test modules from the 4 largest parser files (`dart.rs`, `csharp.rs`, `cpp.rs`, `typescript.rs`) into dedicated `*_tests.rs` sibling files using the `#[cfg(test)] #[path = "..."] mod tests;` pattern; split `main.rs` (1043 lines) into a dispatch-only `main.rs` (~332 lines) and a new `src/cli.rs` holding `Cli`, `Commands`, and `find_project_root()`; relocated `cmd_install_claude_plugin()` from `main.rs` to `src/commands/management.rs` as a `pub fn`; extracted Dart's error recovery subsystem (structs and functions at ~L855--1093) into a dedicated `src/parsers/treesitter/dart_error_recovery.rs` submodule with `pub(super)` helpers accessible to `dart.rs`; deduplicated `find_capture` from 14 identical local copies across parser files into a single `pub(crate) fn find_capture` in `src/parsers/treesitter/mod.rs`. Net result: all 5 target files reduced below 1000 lines (`dart.rs` −54%, `csharp.rs` −64%, `cpp.rs` −57%, `typescript.rs` −34%, `main.rs` −68%); 6 new files created; +124/−3928 lines net change; 399 tests green, zero clippy warnings.
