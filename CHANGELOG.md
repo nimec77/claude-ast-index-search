@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.27.1] - 2026-03-02
+
 - **Rust 2018+ module layout** — converted three `mod.rs` files to file-based modules (`src/commands.rs`, `src/parsers.rs`, `src/parsers/treesitter.rs`); no behavioral changes.
 
 ## [3.27.0] - 2026-03-02
