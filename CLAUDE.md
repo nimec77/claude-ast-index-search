@@ -35,10 +35,12 @@ cargo bench
 
 `ast-index` is a fast multi-language code search CLI. It parses source files into a SQLite+FTS5 index and serves queries from it.
 
-**Core flow:** `main.rs` (clap CLI) → `commands/` (command handlers) → `db.rs` (SQLite) and `indexer.rs` (parallel file walk + parsing)
+**Core flow:** `main.rs` (~330 lines, dispatch only) → `commands/` (command handlers) → `db.rs` (SQLite) and `indexer.rs` (parallel file walk + parsing)
 
 ### Key modules
 
+- **`src/main.rs`** — Entry point (~330 lines). Dispatch-only: parses CLI args via `Cli::parse()`, detects project root, computes directory scope, and dispatches to the appropriate `commands::*` handler. CLI definition is in `src/cli.rs`.
+- **`src/cli.rs`** — CLI definition (~660 lines): `pub struct Cli` (clap `Parser`), `pub enum Commands` (all subcommands with their argument types), and `pub fn find_project_root()` (walks ancestors for index DB/build markers).
 - **`src/indexer.rs`** — Parent module: shared types (`ProjectType`, `ModuleLookup`, `WalkResult`, `ParsedFile`), constants (`MAX_FILE_SIZE=1MB`, `PARSE_CHUNK_SIZE=500`, `MAX_WALK_DEPTH=50`), helpers (`configure_walk_ignores`, `build_thread_pool`), and `pub use` re-exports of the full public API. Sub-modules under `src/indexer/`:
   - **`files.rs`** — Directory walk (respects `.gitignore`/`.arcignore`), parallel parsing with rayon in chunks of 500 files, incremental updates, `write_batch_to_db`. Files >1 MB are skipped.
   - **`modules.rs`** — Gradle/Maven/SPM/Flutter/Bazel module discovery and inter-module dependency indexing.
@@ -48,16 +50,18 @@ cargo bench
 - **`src/db.rs`** — Parent module: SQLite schema, `SymbolKind` enum, `open_db_or_warn` (guard helper used by all command files), DB path (cache dir keyed by project root hash via djb2), `AST_INDEX_DB_PATH` env override, insert functions, `pub use queries::*` re-export. WAL mode + 5 s busy timeout + exclusive file lock (`index.db.lock`) prevent concurrent rebuild conflicts. Sub-module:
   - **`src/db/queries.rs`** — All query types (`SearchResult`, `RefResult`, `SearchScope`, `DbStats`) and search/find functions. `SearchScope::empty()` is the constructor for no-scope queries.
 - **`src/parsers/`** — Two-tier parser system:
-  - `treesitter/` — Tree-sitter AST parsers (primary, one per language), each implements `LanguageParser` trait. Registered in `treesitter/mod.rs::get_treesitter_parser()`.
+  - `treesitter/` — Tree-sitter AST parsers (primary, one per language), each implements `LanguageParser` trait. Registered in `treesitter/mod.rs::get_treesitter_parser()`. Shared helper `pub(crate) fn find_capture` is defined once in `treesitter/mod.rs` and imported by all 14 parser files.
   - `perl.rs`, `wsdl.rs` — Regex-based parsers for languages without tree-sitter support.
   - `typescript.rs` — Regex-based parser used for Vue/Svelte script block extraction (TypeScript itself uses tree-sitter).
   - `Vue`/`Svelte` files: script blocks extracted then parsed with the regex TypeScript parser.
   - `treesitter/queries/<lang>.scm` — Tree-sitter S-expression query patterns.
-- **`src/commands/`** — One file per command group (`grep.rs`, `management.rs`, `index.rs`, `modules.rs`, `files.rs`, `android.rs`, `ios.rs`, `perl.rs`, `analysis.rs`, `project_info.rs`, `watch.rs`). Grep-based commands use ripgrep internals (`grep-searcher`); index-based commands query SQLite directly.
+  - **`treesitter/dart_error_recovery.rs`** — Dart error recovery submodule (~240 lines): structs and functions for recovering class/extension-type declarations from tree-sitter ERROR nodes (`try_recover_from_error`, `extract_parents_from_error_text`, helper finders). Loaded as `#[path = "dart_error_recovery.rs"] mod error_recovery;` inside `dart.rs`.
+  - **`treesitter/dart_tests.rs`**, **`treesitter/csharp_tests.rs`**, **`treesitter/cpp_tests.rs`**, **`treesitter/typescript_tests.rs`** — Test modules extracted from the corresponding parser files using `#[cfg(test)] #[path = "<lang>_tests.rs"] mod tests;`. Each file starts with `use super::*;` and contains all `#[test]` functions.
+- **`src/commands/`** — One file per command group (`grep.rs`, `management.rs`, `index.rs`, `modules.rs`, `files.rs`, `android.rs`, `ios.rs`, `perl.rs`, `analysis.rs`, `project_info.rs`, `watch.rs`). Grep-based commands use ripgrep internals (`grep-searcher`); index-based commands query SQLite directly. `management.rs` includes `pub fn cmd_install_claude_plugin()`.
 
 ### Project root detection (`find_project_root()`)
 
-Walks ancestor directories looking for, in order: existing index DB → Gradle markers → `Package.swift`/`.xcodeproj` → `pubspec.yaml` → Bazel `WORKSPACE`. Falls back to CWD.
+Defined in `src/cli.rs`. Walks ancestor directories looking for, in order: existing index DB → Gradle markers → `Package.swift`/`.xcodeproj` → `pubspec.yaml` → Bazel `WORKSPACE`. Falls back to CWD.
 
 ### Sub-project mode
 
@@ -85,7 +89,7 @@ The plugin version in `plugin.json` must be bumped in sync with Cargo.toml on re
 3. Create `src/parsers/treesitter/<lang>.rs` implementing `LanguageParser`
 4. Register in `src/parsers/treesitter/mod.rs::get_treesitter_parser()`
 5. Add file extensions in `src/indexer.rs`
-6. Add tests (see existing parsers as reference)
+6. Add tests inline in `<lang>.rs` (see smaller parsers as reference); if the test module exceeds ~400 lines, extract to `<lang>_tests.rs` using `#[cfg(test)] #[path = "<lang>_tests.rs"] mod tests;` (see `dart.rs`, `csharp.rs`, `cpp.rs`, `typescript.rs`)
 
 **Plugin side (do alongside the Rust changes):**
 7. Create `plugin/commands/initialize-<lang>.md` following the pattern of existing initialize commands; verify step should use a language-relevant search term

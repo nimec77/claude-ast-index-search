@@ -955,3 +955,57 @@ pub fn cmd_schema(root: &Path) -> Result<()> {
     );
     Ok(())
 }
+
+/// Install the Claude Code ast-index plugin via the `claude` CLI
+pub fn cmd_install_claude_plugin() -> Result<()> {
+    use std::process::Command;
+
+    println!("Adding ast-index marketplace...");
+    let status = Command::new("claude")
+        .args([
+            "plugin",
+            "marketplace",
+            "add",
+            "defendend/Claude-ast-index-search",
+        ])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("Marketplace added successfully.");
+        }
+        Ok(s) => {
+            eprintln!("Warning: marketplace add exited with {}", s);
+        }
+        Err(e) => {
+            eprintln!("Error: could not run 'claude' CLI: {}", e);
+            eprintln!(
+                "Make sure Claude Code is installed: https://docs.anthropic.com/en/docs/claude-code"
+            );
+            return Err(anyhow::anyhow!("claude CLI not found"));
+        }
+    }
+
+    println!("Installing ast-index plugin...");
+    let status = Command::new("claude")
+        .args(["plugin", "install", "ast-index"])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => {
+            println!("Plugin installed successfully.");
+            println!("\nRestart Claude Code to activate the plugin.");
+        }
+        Ok(s) => {
+            eprintln!("Plugin install exited with {}", s);
+        }
+        Err(e) => {
+            return Err(anyhow::anyhow!(
+                "Failed to run claude plugin install: {}",
+                e
+            ));
+        }
+    }
+
+    Ok(())
+}
