@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- Bump `rusqlite` from 0.38.0 to 0.39.0 (`bundled-full` feature)
+- Replace `tree-sitter-dart` with `tree-sitter-dart-orchard` 0.3.2
+- Bump `tree-sitter-scala` from 0.24 to 0.25.0
+
 ## [3.27.3] - 2026-03-28
 
 ### Added
