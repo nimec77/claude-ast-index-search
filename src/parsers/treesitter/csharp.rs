@@ -4,7 +4,9 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{
+    CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree,
+};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 

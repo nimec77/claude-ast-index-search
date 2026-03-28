@@ -6,12 +6,22 @@ use serde::Serialize;
 
 /// Symbol kinds that represent class-like declarations.
 const CLASS_LIKE_KINDS: &[&str] = &[
-    "class", "interface", "object", "enum", "protocol", "struct", "actor", "package",
+    "class",
+    "interface",
+    "object",
+    "enum",
+    "protocol",
+    "struct",
+    "actor",
+    "package",
 ];
 
 /// Build a SQL `IN (...)` clause for class-like kinds.
 fn class_like_in_clause() -> String {
-    let items: Vec<String> = CLASS_LIKE_KINDS.iter().map(|k| format!("'{}'", k)).collect();
+    let items: Vec<String> = CLASS_LIKE_KINDS
+        .iter()
+        .map(|k| format!("'{}'", k))
+        .collect();
     format!("({})", items.join(", "))
 }
 
