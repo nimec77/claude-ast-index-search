@@ -20,7 +20,7 @@ pub mod swift;
 pub mod typescript;
 
 use anyhow::Result;
-use tree_sitter::{Language, Parser, Tree};
+use tree_sitter::{Language, Parser, Query, Tree};
 
 use super::{FileType, ParsedRef, ParsedSymbol, extract_references};
 
@@ -98,4 +98,38 @@ pub(crate) fn find_capture<'a>(
 ) -> Option<&'a tree_sitter::QueryCapture<'a>> {
     let idx = idx?;
     m.captures.iter().find(|c| c.index == idx)
+}
+
+/// Maps tree-sitter capture names to their numeric indices.
+///
+/// Every parser recreates a closure for this lookup. This struct provides
+/// the same functionality once.
+///
+/// Usage:
+/// ```ignore
+/// let idx = CaptureIndexer::new(query);
+/// let idx_class = idx.get("class_name");
+/// // then: find_capture(m, idx_class)
+/// ```
+#[allow(dead_code)]
+pub(crate) struct CaptureIndexer {
+    names: Vec<String>,
+}
+
+#[allow(dead_code)]
+impl CaptureIndexer {
+    pub fn new(query: &Query) -> Self {
+        Self {
+            names: query.capture_names().iter().map(|n| n.to_string()).collect(),
+        }
+    }
+
+    /// Look up the index for a capture name. Returns `None` if the name
+    /// is not present in the query (which `find_capture` handles gracefully).
+    pub fn get(&self, name: &str) -> Option<u32> {
+        self.names
+            .iter()
+            .position(|n| n == name)
+            .map(|i| i as u32)
+    }
 }
