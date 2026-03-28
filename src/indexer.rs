@@ -41,6 +41,21 @@ pub const PARSE_CHUNK_SIZE: usize = 500;
 /// Maximum directory walk depth for WalkBuilder.
 pub const MAX_WALK_DEPTH: usize = 50;
 
+/// Log progress every N entries during directory walk
+pub const WALK_PROGRESS_INTERVAL: usize = 10_000;
+
+/// Log progress every N files during parsing
+pub const PARSE_PROGRESS_INTERVAL: usize = 2_000;
+
+/// Log progress every N files during .d.ts parsing
+pub const DTS_PROGRESS_INTERVAL: usize = 1_000;
+
+/// Log progress every N files during incremental update
+pub const INCREMENTAL_PROGRESS_INTERVAL: usize = 500;
+
+/// Max depth for node_modules scanning (pnpm/nested packages)
+pub const NODE_MODULES_MAX_DEPTH: usize = 8;
+
 /// Build a rayon thread pool, respecting the `AST_INDEX_THREADS` env var.
 fn build_thread_pool() -> Result<rayon::ThreadPool> {
     let num_threads = std::env::var("AST_INDEX_THREADS")
@@ -308,8 +323,11 @@ pub(crate) struct ParsedFile {
     pub(crate) refs: Vec<ParsedRef>,
 }
 
-/// Directories to always exclude from indexing (regardless of .gitignore)
-const EXCLUDED_DIRS: &[&str] = &[
+/// Directories to always exclude from indexing and watching (regardless of .gitignore).
+///
+/// Used by both the directory walker (`is_excluded_dir`) and the file watcher.
+pub const EXCLUDED_DIRS: &[&str] = &[
+    ".git",
     "node_modules",
     "__pycache__",
     ".build",

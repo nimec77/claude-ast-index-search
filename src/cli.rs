@@ -5,6 +5,32 @@ use std::path::PathBuf;
 
 use ast_index::db;
 
+/// Default result limit for most commands
+const DEFAULT_LIMIT: &str = "50";
+
+/// Default result limit for commands that return fewer results
+const DEFAULT_LIMIT_SMALL: &str = "20";
+
+/// Default call-tree depth
+const DEFAULT_CALL_DEPTH: &str = "3";
+
+/// Default per-directory limit for map command
+const DEFAULT_PER_DIR: &str = "5";
+
+/// Default todo search pattern
+const DEFAULT_TODO_PATTERN: &str = "TODO|FIXME|HACK";
+
+/// File-based project root markers. If any of these exist in a directory, it's a project root.
+const PROJECT_ROOT_MARKERS: &[&str] = &[
+    "settings.gradle",
+    "settings.gradle.kts",
+    "Package.swift",
+    "pubspec.yaml",
+    "WORKSPACE",
+    "WORKSPACE.bazel",
+    "MODULE.bazel",
+];
+
 #[derive(Parser)]
 #[command(name = "ast-index")]
 #[command(about = "Fast code search for multi-language projects")]
@@ -112,10 +138,10 @@ pub enum Commands {
     /// Find TODO/FIXME/HACK comments
     Todo {
         /// Pattern to search
-        #[arg(default_value = "TODO|FIXME|HACK")]
+        #[arg(default_value = DEFAULT_TODO_PATTERN)]
         pattern: String,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find callers of a function
@@ -123,7 +149,7 @@ pub enum Commands {
         /// Function name
         function_name: String,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Show call hierarchy (callers tree up) for a function
@@ -131,7 +157,7 @@ pub enum Commands {
         /// Function name
         function_name: String,
         /// Max depth of the tree
-        #[arg(short, long, default_value = "3")]
+        #[arg(short, long, default_value = DEFAULT_CALL_DEPTH)]
         depth: usize,
         /// Max callers per level
         #[arg(short, long, default_value = "10")]
@@ -142,7 +168,7 @@ pub enum Commands {
         /// Type name
         type_name: String,
         /// Max results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT_SMALL)]
         limit: usize,
     },
     /// Find suspend functions
@@ -150,7 +176,7 @@ pub enum Commands {
         /// Filter by name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find @Composable functions
@@ -158,7 +184,7 @@ pub enum Commands {
         /// Filter by name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find @Deprecated items
@@ -166,7 +192,7 @@ pub enum Commands {
         /// Filter by name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find @Suppress annotations
@@ -174,7 +200,7 @@ pub enum Commands {
         /// Filter by suppression type (e.g., UNCHECKED_CAST)
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find @Inject points for a type
@@ -182,7 +208,7 @@ pub enum Commands {
         /// Type name to search
         type_name: String,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find classes with annotation
@@ -190,7 +216,7 @@ pub enum Commands {
         /// Annotation name (e.g., @Module, @Inject)
         annotation: String,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find deeplinks
@@ -198,7 +224,7 @@ pub enum Commands {
         /// Filter by pattern
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find extension functions
@@ -206,7 +232,7 @@ pub enum Commands {
         /// Receiver type (e.g., String, View)
         receiver_type: String,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find Flow/StateFlow/SharedFlow
@@ -214,7 +240,7 @@ pub enum Commands {
         /// Filter by name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find @Preview functions
@@ -222,7 +248,7 @@ pub enum Commands {
         /// Filter by name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     // === Index Commands ===
@@ -261,7 +287,7 @@ pub enum Commands {
         /// Search query
         query: String,
         /// Max results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT_SMALL)]
         limit: usize,
         /// Filter by file path
         #[arg(long)]
@@ -281,7 +307,7 @@ pub enum Commands {
         #[arg(long)]
         exact: bool,
         /// Max results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT_SMALL)]
         limit: usize,
     },
     /// Find symbols (classes, interfaces, functions)
@@ -295,7 +321,7 @@ pub enum Commands {
         #[arg(long, short = 't')]
         r#type: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT_SMALL)]
         limit: usize,
         /// Filter by file path
         #[arg(long)]
@@ -315,7 +341,7 @@ pub enum Commands {
         #[arg(long, short = 'p')]
         pattern: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT_SMALL)]
         limit: usize,
         /// Filter by file path
         #[arg(long)]
@@ -332,7 +358,7 @@ pub enum Commands {
         /// Parent class/interface name
         parent: String,
         /// Max results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT_SMALL)]
         limit: usize,
         /// Filter by file path
         #[arg(long)]
@@ -351,7 +377,7 @@ pub enum Commands {
         /// Module name pattern
         pattern: String,
         /// Max results
-        #[arg(short, long, default_value = "20")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT_SMALL)]
         limit: usize,
     },
     /// Show module dependencies
@@ -412,7 +438,7 @@ pub enum Commands {
         /// Symbol name
         symbol: String,
         /// Max results per section
-        #[arg(short, long, default_value = "20")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT_SMALL)]
         limit: usize,
     },
     /// Find usages of a symbol
@@ -420,7 +446,7 @@ pub enum Commands {
         /// Symbol name
         symbol: String,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
         /// Filter by file path
         #[arg(long)]
@@ -482,7 +508,7 @@ pub enum Commands {
         /// Filter by name or type (State, Binding, Published, ObservedObject)
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find async functions (Swift)
@@ -490,7 +516,7 @@ pub enum Commands {
         /// Filter by name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find Combine publishers (Swift)
@@ -498,7 +524,7 @@ pub enum Commands {
         /// Filter by name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find @MainActor functions and classes (Swift)
@@ -506,7 +532,7 @@ pub enum Commands {
         /// Filter by name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     // === Perl Commands ===
@@ -515,7 +541,7 @@ pub enum Commands {
         /// Filter by module/function name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find Perl subroutines
@@ -523,7 +549,7 @@ pub enum Commands {
         /// Filter by name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find POD documentation sections
@@ -531,7 +557,7 @@ pub enum Commands {
         /// Filter by heading text
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find Perl test assertions (Test::More, Test::Simple)
@@ -539,7 +565,7 @@ pub enum Commands {
         /// Filter by test name or pattern
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Find Perl use/require statements
@@ -547,7 +573,7 @@ pub enum Commands {
         /// Filter by module name
         query: Option<String>,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     // === Project Insights ===
@@ -557,10 +583,10 @@ pub enum Commands {
         #[arg(short, long)]
         module: Option<String>,
         /// Max symbols per directory group (detailed mode)
-        #[arg(long, default_value = "5")]
+        #[arg(long, default_value = DEFAULT_PER_DIR)]
         per_dir: usize,
         /// Max directory groups to show
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Detect project conventions (architecture, frameworks, naming)
@@ -574,7 +600,7 @@ pub enum Commands {
         #[arg(long)]
         export_only: bool,
         /// Max results
-        #[arg(short, long, default_value = "50")]
+        #[arg(short, long, default_value = DEFAULT_LIMIT)]
         limit: usize,
     },
     /// Add additional source root to project
@@ -633,37 +659,18 @@ pub fn find_project_root() -> Result<PathBuf> {
         if db::db_exists(ancestor) {
             return Ok(ancestor.to_path_buf());
         }
-        // Android/Gradle markers
-        if ancestor.join("settings.gradle").exists()
-            || ancestor.join("settings.gradle.kts").exists()
-        {
-            return Ok(ancestor.to_path_buf());
-        }
-        // iOS/Swift markers
-        if ancestor.join("Package.swift").exists() {
-            return Ok(ancestor.to_path_buf());
-        }
-        // Check for .xcodeproj
-        if let Ok(entries) = std::fs::read_dir(ancestor) {
-            for entry in entries.flatten() {
-                if entry
-                    .path()
-                    .extension()
-                    .map(|e| e == "xcodeproj")
-                    .unwrap_or(false)
-                {
-                    return Ok(ancestor.to_path_buf());
-                }
+        // Check file-based markers
+        for marker in PROJECT_ROOT_MARKERS {
+            if ancestor.join(marker).exists() {
+                return Ok(ancestor.to_path_buf());
             }
         }
-        // Flutter markers
-        if ancestor.join("pubspec.yaml").exists() {
-            return Ok(ancestor.to_path_buf());
-        }
-        // Bazel markers
-        if ancestor.join("WORKSPACE").exists()
-            || ancestor.join("WORKSPACE.bazel").exists()
-            || ancestor.join("MODULE.bazel").exists()
+
+        // Check for .xcodeproj directory (special case: directory, not file)
+        if let Ok(entries) = std::fs::read_dir(ancestor)
+            && entries
+                .flatten()
+                .any(|e| e.path().extension().is_some_and(|ext| ext == "xcodeproj"))
         {
             return Ok(ancestor.to_path_buf());
         }

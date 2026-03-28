@@ -12,7 +12,8 @@ use rusqlite::Connection;
 use crate::parsers;
 
 use super::{
-    MAX_FILE_SIZE, MAX_WALK_DEPTH, PARSE_CHUNK_SIZE, ParsedFile, WalkResult, build_thread_pool,
+    INCREMENTAL_PROGRESS_INTERVAL, MAX_FILE_SIZE, MAX_WALK_DEPTH, PARSE_CHUNK_SIZE,
+    PARSE_PROGRESS_INTERVAL, ParsedFile, WALK_PROGRESS_INTERVAL, WalkResult, build_thread_pool,
     configure_walk_ignores, detect_project_type, find_arc_root, has_git_repo, is_excluded_dir,
     is_module_file,
 };
@@ -168,7 +169,7 @@ pub fn index_directory_scoped(
     let mut walk_entries = 0usize;
     for entry in walker.filter_map(|e| e.ok()) {
         walk_entries += 1;
-        if verbose && walk_entries.is_multiple_of(10000) {
+        if verbose && walk_entries.is_multiple_of(WALK_PROGRESS_INTERVAL) {
             eprintln!(
                 "[verbose] walk: {} entries scanned in {:?}...",
                 walk_entries,
@@ -258,7 +259,7 @@ pub fn index_directory_scoped(
                 .filter_map(|path| {
                     let result = parse_file(&root_clone, path).ok();
                     let c = counter.fetch_add(1, Ordering::Relaxed) + 1;
-                    if progress && c.is_multiple_of(2000) {
+                    if progress && c.is_multiple_of(PARSE_PROGRESS_INTERVAL) {
                         eprintln!("Parsed {} / {} files...", c, total);
                     }
                     result
@@ -487,7 +488,7 @@ pub fn update_directory_incremental(
             .filter_map(|path| {
                 let result = parse_file(&root_clone, path).ok();
                 let c = parsed_count_clone.fetch_add(1, Ordering::Relaxed) + 1;
-                if progress && c.is_multiple_of(500) {
+                if progress && c.is_multiple_of(INCREMENTAL_PROGRESS_INTERVAL) {
                     eprintln!("Parsed {} / {} changed files...", c, total_files);
                 }
                 result
