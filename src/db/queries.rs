@@ -87,29 +87,29 @@ pub fn find_implementations(
     parent_name: &str,
     limit: usize,
 ) -> Result<Vec<SearchResult>> {
-    // Match exact name, qualified suffix (%.Name), or contains (%Name%)
+    // Match exact name or qualified suffix (%.Name) only.
+    // Avoids broad contains match (%Name%) which causes false positives
+    // (e.g., searching "Map" would match "HashMap", "TreeMap").
     let suffix_pattern = format!("%.{}", parent_name);
-    let contains_pattern = format!("%{}%", parent_name);
     let mut stmt = conn.prepare(
         r#"
         SELECT s.name, s.kind, s.line, s.signature, f.path
         FROM inheritance i
         JOIN symbols s ON i.child_id = s.id
         JOIN files f ON s.file_id = f.id
-        WHERE i.parent_name = ?1 OR i.parent_name LIKE ?2 OR i.parent_name LIKE ?3
+        WHERE i.parent_name = ?1 OR i.parent_name LIKE ?2
         ORDER BY
             CASE
                 WHEN i.parent_name = ?1 THEN 0
-                WHEN i.parent_name LIKE ?2 THEN 1
-                ELSE 2
+                ELSE 1
             END, s.name
-        LIMIT ?4
+        LIMIT ?3
         "#,
     )?;
 
     let results = stmt
         .query_map(
-            params![parent_name, suffix_pattern, contains_pattern, limit as i64],
+            params![parent_name, suffix_pattern, limit as i64],
             SearchResult::from_row,
         )?
         .collect::<Result<Vec<_>, _>>()?;
@@ -328,7 +328,7 @@ impl SearchScope<'_> {
         }
         if let Some(file) = self.in_file {
             conditions.push("f.path LIKE ?".to_string());
-            params.push(format!("%{}", file));
+            params.push(format!("%{}%", file));
         }
         if let Some(module) = self.module {
             conditions.push("f.path LIKE ?".to_string());
@@ -500,6 +500,71 @@ pub fn find_class_like_scoped(
         .query_map(param_refs.as_slice(), SearchResult::from_row)?
         .collect::<Result<Vec<_>, _>>()?;
 
+    Ok(results)
+}
+
+/// Convert a glob pattern to SQL LIKE pattern: `*` → `%`, `?` → `_`
+pub fn glob_to_like(pattern: &str) -> String {
+    pattern
+        .replace('%', r"\%")
+        .replace('_', r"\_")
+        .replace('*', "%")
+        .replace('?', "_")
+}
+
+/// Find symbols by glob pattern with optional kind filter
+pub fn find_symbols_by_pattern(
+    conn: &Connection,
+    pattern: &str,
+    kind: Option<&str>,
+    limit: usize,
+) -> Result<Vec<SearchResult>> {
+    let like_pattern = glob_to_like(pattern);
+    let mut sql = String::from(
+        "SELECT s.name, s.kind, s.line, s.signature, f.path \
+         FROM symbols s JOIN files f ON s.file_id = f.id \
+         WHERE s.name LIKE ?1",
+    );
+    if kind.is_some() {
+        sql.push_str(" AND s.kind = ?2 ORDER BY length(s.name) LIMIT ?3");
+    } else {
+        sql.push_str(" ORDER BY length(s.name) LIMIT ?2");
+    }
+
+    let mut stmt = conn.prepare(&sql)?;
+    let results = if let Some(k) = kind {
+        stmt.query_map(
+            params![like_pattern, k, limit as i64],
+            SearchResult::from_row,
+        )?
+        .collect::<Result<Vec<_>, _>>()?
+    } else {
+        stmt.query_map(params![like_pattern, limit as i64], SearchResult::from_row)?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+    Ok(results)
+}
+
+/// Find class-like symbols by glob pattern
+pub fn find_class_like_pattern(
+    conn: &Connection,
+    pattern: &str,
+    limit: usize,
+) -> Result<Vec<SearchResult>> {
+    let like_pattern = glob_to_like(pattern);
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT s.name, s.kind, s.line, s.signature, f.path
+        FROM symbols s
+        JOIN files f ON s.file_id = f.id
+        WHERE s.name LIKE ?1 AND s.kind IN ('class', 'interface', 'object', 'enum', 'protocol', 'struct', 'actor', 'package')
+        ORDER BY length(s.name)
+        LIMIT ?2
+        "#,
+    )?;
+    let results = stmt
+        .query_map(params![like_pattern, limit as i64], SearchResult::from_row)?
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(results)
 }
 

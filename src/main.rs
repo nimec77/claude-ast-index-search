@@ -117,12 +117,16 @@ fn main() -> Result<()> {
         }
         Commands::Symbol {
             name,
+            pattern,
             r#type,
             limit,
             in_file,
             module,
             fuzzy,
         } => {
+            if name.is_none() && pattern.is_none() {
+                anyhow::bail!("Either <NAME> or --pattern must be provided");
+            }
             let scope = db::SearchScope {
                 in_file: in_file.as_deref(),
                 module: module.as_deref(),
@@ -130,7 +134,8 @@ fn main() -> Result<()> {
             };
             commands::index::cmd_symbol(
                 &root,
-                &name,
+                name.as_deref(),
+                pattern.as_deref(),
                 r#type.as_deref(),
                 limit,
                 format,
@@ -140,17 +145,29 @@ fn main() -> Result<()> {
         }
         Commands::Class {
             name,
+            pattern,
             limit,
             in_file,
             module,
             fuzzy,
         } => {
+            if name.is_none() && pattern.is_none() {
+                anyhow::bail!("Either <NAME> or --pattern must be provided");
+            }
             let scope = db::SearchScope {
                 in_file: in_file.as_deref(),
                 module: module.as_deref(),
                 dir_prefix: dir_prefix_ref,
             };
-            commands::index::cmd_class(&root, &name, limit, format, &scope, fuzzy)
+            commands::index::cmd_class(
+                &root,
+                name.as_deref(),
+                pattern.as_deref(),
+                limit,
+                format,
+                &scope,
+                fuzzy,
+            )
         }
         Commands::Implementations {
             parent,

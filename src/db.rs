@@ -21,8 +21,12 @@ pub fn get_db_path(project_root: &Path) -> Result<PathBuf> {
         .context("Could not find cache directory")?
         .join("ast-index");
 
+    // Canonicalize to handle VFS remounts / symlinks pointing to the same project
+    let canonical_root = project_root
+        .canonicalize()
+        .unwrap_or_else(|_| project_root.to_path_buf());
     // Create hash from project root for unique DB per project
-    let project_hash = simple_hash(project_root.to_string_lossy().as_ref());
+    let project_hash = simple_hash(canonical_root.to_string_lossy().as_ref());
     let db_dir = cache_dir.join(&project_hash);
 
     // Auto-migrate: if new hash dir doesn't have a DB, look for old one

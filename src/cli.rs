@@ -287,7 +287,10 @@ pub enum Commands {
     /// Find symbols (classes, interfaces, functions)
     Symbol {
         /// Symbol name
-        name: String,
+        name: Option<String>,
+        /// Glob pattern (e.g., *Mailer, *Service*)
+        #[arg(long, short = 'p')]
+        pattern: Option<String>,
         /// Symbol type: class, interface, function, property
         #[arg(long, short = 't')]
         r#type: Option<String>,
@@ -307,7 +310,10 @@ pub enum Commands {
     /// Find class or interface
     Class {
         /// Class name
-        name: String,
+        name: Option<String>,
+        /// Glob pattern (e.g., *Repository, *Service*)
+        #[arg(long, short = 'p')]
+        pattern: Option<String>,
         /// Max results
         #[arg(short, long, default_value = "20")]
         limit: usize,

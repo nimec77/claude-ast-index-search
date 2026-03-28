@@ -25,6 +25,14 @@ use regex::Regex;
 
 use super::{relative_path, search_files_limited};
 
+/// Source file extensions for language-agnostic grep commands.
+/// Platform-specific commands (e.g., Kotlin-only `suspend`, `composables`) use narrower sets.
+pub const ALL_SOURCE_EXTENSIONS: &[&str] = &[
+    "kt", "java", "swift", "m", "h", "dart", "pm", "pl", "t", "rb", "ts", "tsx", "js", "jsx",
+    "mjs", "cjs", "vue", "svelte", "py", "go", "rs", "cs", "cpp", "cc", "c", "hpp", "scala", "php",
+    "groovy", "proto", "wsdl", "xsd",
+];
+
 /// Search files for a pattern and print results in the standard two-line format.
 ///
 /// Applies an optional query filter on each matched line. Results are printed as:
@@ -79,7 +87,7 @@ pub fn cmd_todo(root: &Path, pattern: &str, limit: usize) -> Result<()> {
     search_files_limited(
         root,
         &search_pattern,
-        &["kt", "java", "swift", "m", "h", "pm", "pl", "t"],
+        ALL_SOURCE_EXTENSIONS,
         limit,
         |path, line_num, line| {
             let rel_path = relative_path(root, path);
@@ -127,9 +135,10 @@ pub fn cmd_todo(root: &Path, pattern: &str, limit: usize) -> Result<()> {
 /// Find function callers
 pub fn cmd_callers(root: &Path, function_name: &str, limit: usize) -> Result<()> {
     let start = Instant::now();
-    // Pattern for function calls: obj.func(), ->func(), func(), this.func(), super.func()
+    // Pattern for function calls: obj.func(), ->func(), func(), this.func(), super.func(),
+    // await func(), return func(), yield func()
     let pattern = format!(
-        r"[.>]{fn_name}\s*\(|^\s*{fn_name}\s*\(|->{fn_name}\s*\(|&{fn_name}\s*\(|this\.{fn_name}\s*\(|super\.{fn_name}\s*\(",
+        r"[.>]{fn_name}\s*\(|^\s*{fn_name}\s*\(|->{fn_name}\s*\(|&{fn_name}\s*\(|this\.{fn_name}\s*\(|super\.{fn_name}\s*\(|\bawait\s+{fn_name}\s*\(|\breturn\s+{fn_name}\s*\(|\byield\s+{fn_name}\s*\(",
         fn_name = function_name
     );
     // Skip definitions in Kotlin/Java/Swift/Perl
@@ -144,7 +153,7 @@ pub fn cmd_callers(root: &Path, function_name: &str, limit: usize) -> Result<()>
     search_files_limited(
         root,
         &pattern,
-        &["kt", "java", "swift", "m", "h", "pm", "pl", "t"],
+        ALL_SOURCE_EXTENSIONS,
         limit,
         |path, line_num, line| {
             if def_pattern.is_match(line) {
@@ -262,7 +271,7 @@ fn find_caller_functions(
     limit: usize,
 ) -> Result<Vec<(String, String, usize)>> {
     let pattern = format!(
-        r"[.>]{fn_name}\s*\(|^\s*{fn_name}\s*\(|->{fn_name}\s*\(|&{fn_name}\s*\(|this\.{fn_name}\s*\(|super\.{fn_name}\s*\(",
+        r"[.>]{fn_name}\s*\(|^\s*{fn_name}\s*\(|->{fn_name}\s*\(|&{fn_name}\s*\(|this\.{fn_name}\s*\(|super\.{fn_name}\s*\(|\bawait\s+{fn_name}\s*\(|\breturn\s+{fn_name}\s*\(|\byield\s+{fn_name}\s*\(",
         fn_name = function_name
     );
     let def_pattern = Regex::new(&format!(
@@ -284,7 +293,7 @@ fn find_caller_functions(
     search_files_limited(
         root,
         &pattern,
-        &["kt", "java", "swift", "m", "h", "pm", "pl", "t"],
+        ALL_SOURCE_EXTENSIONS,
         limit * 3,
         |path, line_num, line| {
             if def_pattern.is_match(line) {
@@ -572,7 +581,7 @@ pub fn cmd_deprecated(root: &Path, query: Option<&str>, limit: usize) -> Result<
     grep_and_print(
         root,
         r"@Deprecated|@available\s*\([^)]*deprecated|#.*DEPRECATED|=head.*DEPRECATED",
-        &["kt", "java", "swift", "m", "h", "pm", "pl", "t"],
+        ALL_SOURCE_EXTENSIONS,
         query,
         limit,
         "@Deprecated items",
@@ -652,7 +661,7 @@ pub fn cmd_annotations(root: &Path, annotation: &str, limit: usize) -> Result<()
     grep_and_print(
         root,
         &pattern,
-        &["kt", "java", "swift", "m", "h", "pm", "pl", "t"],
+        ALL_SOURCE_EXTENSIONS,
         None,
         limit,
         &label,

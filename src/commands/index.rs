@@ -8,6 +8,7 @@
 //! - hierarchy: Show class hierarchy
 //! - usages: Find symbol usages (indexed or grep-based)
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::Instant;
 
@@ -35,41 +36,80 @@ pub fn cmd_search(
         None => return Ok(()),
     };
 
+    // Support comma-separated OR queries
+    let terms: Vec<&str> = query
+        .split(',')
+        .map(|t| t.trim())
+        .filter(|t| !t.is_empty())
+        .collect();
+
+    let mut files: Vec<String> = Vec::new();
+    let mut symbols: Vec<db::SearchResult> = Vec::new();
+    let mut ref_matches: Vec<(String, i64)> = Vec::new();
+    let mut content_matches: Vec<(String, usize, String)> = Vec::new();
+
+    // Dedup sets
+    let mut seen_files: HashSet<String> = HashSet::new();
+    let mut seen_symbols: HashSet<(String, i64, String)> = HashSet::new(); // (name, line, path)
+    let mut seen_refs: HashSet<String> = HashSet::new();
+    let mut seen_content: HashSet<(String, usize)> = HashSet::new(); // (path, line)
+
     // 1. Search in file paths (index)
     let files_start = Instant::now();
-    let mut files = db::find_files(&conn, query, limit)?;
-    if let Some(prefix) = scope.dir_prefix {
-        files.retain(|f| f.starts_with(prefix));
+    for term in &terms {
+        for f in db::find_files(&conn, term, limit)? {
+            if let Some(prefix) = scope.dir_prefix
+                && !f.starts_with(prefix)
+            {
+                continue;
+            }
+            if seen_files.insert(f.clone()) {
+                files.push(f);
+            }
+        }
     }
     let files_time = files_start.elapsed();
 
     // 2. Search in symbols using FTS or fuzzy (index)
     let symbols_start = Instant::now();
-    let symbols = if fuzzy {
-        db::search_symbols_fuzzy(&conn, query, limit)?
-    } else {
-        let fts_query = format!("{}*", query); // Prefix search
-        db::search_symbols_scoped(&conn, &fts_query, limit, scope)?
-    };
+    for term in &terms {
+        let batch = if fuzzy {
+            db::search_symbols_fuzzy(&conn, term, limit)?
+        } else {
+            let fts_query = format!("{}*", term);
+            db::search_symbols_scoped(&conn, &fts_query, limit, scope)?
+        };
+        for s in batch {
+            if seen_symbols.insert((s.name.clone(), s.line, s.path.clone())) {
+                symbols.push(s);
+            }
+        }
+    }
     let symbols_time = symbols_start.elapsed();
 
     // 3. Search in references (imports and usages from index)
     let refs_start = Instant::now();
-    let ref_matches = db::search_refs(&conn, query, limit)?;
+    for term in &terms {
+        for r in db::search_refs(&conn, term, limit)? {
+            if seen_refs.insert(r.0.clone()) {
+                ref_matches.push(r);
+            }
+        }
+    }
     let refs_time = refs_start.elapsed();
 
     // 4. Search in file contents (grep)
     let content_start = Instant::now();
-    let pattern = regex::escape(query);
-    let mut content_matches: Vec<(String, usize, String)> = vec![];
+    let pattern = terms
+        .iter()
+        .map(|t| regex::escape(t))
+        .collect::<Vec<_>>()
+        .join("|");
 
     super::search_files_limited(
         root,
         &pattern,
-        &[
-            "kt", "java", "swift", "m", "h", "py", "go", "rs", "cpp", "c", "proto", "ts", "tsx",
-            "js", "jsx",
-        ],
+        super::grep::ALL_SOURCE_EXTENSIONS,
         limit,
         |path, line_num, line| {
             let rel_path = super::relative_path(root, path);
@@ -89,8 +129,10 @@ pub fn cmd_search(
             {
                 return;
             }
-            let content: String = line.trim().chars().take(100).collect();
-            content_matches.push((rel_path, line_num, content));
+            if seen_content.insert((rel_path.clone(), line_num)) {
+                let content: String = line.trim().chars().take(100).collect();
+                content_matches.push((rel_path, line_num, content));
+            }
         },
     )?;
     let content_time = content_start.elapsed();
@@ -172,10 +214,12 @@ pub fn cmd_search(
     Ok(())
 }
 
-/// Find symbol by name
+/// Find symbol by name or glob pattern
+#[allow(clippy::too_many_arguments)]
 pub fn cmd_symbol(
     root: &Path,
-    name: &str,
+    name: Option<&str>,
+    pattern: Option<&str>,
     kind: Option<&str>,
     limit: usize,
     format: &str,
@@ -188,10 +232,20 @@ pub fn cmd_symbol(
         Some(c) => c,
         None => return Ok(()),
     };
-    let symbols = if fuzzy && kind.is_none() {
-        db::search_symbols_fuzzy(&conn, name, limit)?
+
+    let (symbols, display_name) = if let Some(pat) = pattern {
+        (
+            db::find_symbols_by_pattern(&conn, pat, kind, limit)?,
+            pat.to_string(),
+        )
     } else {
-        db::find_symbols_by_name_scoped(&conn, name, kind, limit, scope)?
+        let name = name.unwrap_or("");
+        let results = if fuzzy && kind.is_none() {
+            db::search_symbols_fuzzy(&conn, name, limit)?
+        } else {
+            db::find_symbols_by_name_scoped(&conn, name, kind, limit, scope)?
+        };
+        (results, name.to_string())
     };
 
     if format == "json" {
@@ -202,7 +256,7 @@ pub fn cmd_symbol(
     let kind_str = kind.map(|k| format!(" ({})", k)).unwrap_or_default();
     println!(
         "{}",
-        format!("Symbols matching '{}'{}:", name, kind_str).bold()
+        format!("Symbols matching '{}'{}:", display_name, kind_str).bold()
     );
 
     for s in &symbols {
@@ -221,10 +275,11 @@ pub fn cmd_symbol(
     Ok(())
 }
 
-/// Find class by name (classes, interfaces, objects, enums)
+/// Find class by name or glob pattern (classes, interfaces, objects, enums)
 pub fn cmd_class(
     root: &Path,
-    name: &str,
+    name: Option<&str>,
+    pattern: Option<&str>,
     limit: usize,
     format: &str,
     scope: &SearchScope,
@@ -237,28 +292,35 @@ pub fn cmd_class(
         None => return Ok(()),
     };
 
-    // Single query for all class-like symbols
-    let results = if fuzzy {
-        // Fuzzy: search all symbols then filter to class-like kinds
-        let all = db::search_symbols_fuzzy(&conn, name, limit * 5)?;
-        all.into_iter()
-            .filter(|s| {
-                matches!(
-                    s.kind.as_str(),
-                    "class"
-                        | "interface"
-                        | "object"
-                        | "enum"
-                        | "protocol"
-                        | "struct"
-                        | "actor"
-                        | "package"
-                )
-            })
-            .take(limit)
-            .collect()
+    let (results, display_name) = if let Some(pat) = pattern {
+        (
+            db::find_class_like_pattern(&conn, pat, limit)?,
+            pat.to_string(),
+        )
     } else {
-        db::find_class_like_scoped(&conn, name, limit, scope)?
+        let name = name.unwrap_or("");
+        let r = if fuzzy {
+            let all = db::search_symbols_fuzzy(&conn, name, limit * 5)?;
+            all.into_iter()
+                .filter(|s| {
+                    matches!(
+                        s.kind.as_str(),
+                        "class"
+                            | "interface"
+                            | "object"
+                            | "enum"
+                            | "protocol"
+                            | "struct"
+                            | "actor"
+                            | "package"
+                    )
+                })
+                .take(limit)
+                .collect()
+        } else {
+            db::find_class_like_scoped(&conn, name, limit, scope)?
+        };
+        (r, name.to_string())
     };
 
     if format == "json" {
@@ -266,7 +328,7 @@ pub fn cmd_class(
         return Ok(());
     }
 
-    println!("{}", format!("Classes matching '{}':", name).bold());
+    println!("{}", format!("Classes matching '{}':", display_name).bold());
 
     for s in &results {
         println!("  {} [{}]: {}:{}", s.name.cyan(), s.kind, s.path, s.line);
