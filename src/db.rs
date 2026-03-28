@@ -8,18 +8,42 @@ use rusqlite::{Connection, params};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+// --- Constants ---
+
+/// Database file suffixes (main DB + WAL mode files)
+const DB_FILE_SUFFIXES: &[&str] = &["index.db", "index.db-wal", "index.db-shm"];
+
+/// Cache directory name for the index
+const CACHE_DIR_NAME: &str = "ast-index";
+
+/// Legacy cache directory name (pre-rename)
+const LEGACY_CACHE_DIR_NAME: &str = "kotlin-index";
+
+/// djb2 hash seed value
+const DJB2_SEED: u64 = 5381;
+
+/// SQLite cache size in KB (negative = KB, positive = pages). 8 MB.
+const SQLITE_CACHE_SIZE: &str = "-8000";
+
+/// SQLite busy timeout in milliseconds
+const SQLITE_BUSY_TIMEOUT_MS: i64 = 5000;
+
+/// Environment variable name for DB path override
+const ENV_DB_PATH: &str = "AST_INDEX_DB_PATH";
+
+/// Legacy environment variable name
+const ENV_DB_PATH_LEGACY: &str = "KOTLIN_INDEX_DB_PATH";
+
 /// Get the database path for the current project
 pub fn get_db_path(project_root: &Path) -> Result<PathBuf> {
     // Check env: new name first, fallback to old
-    if let Ok(path) =
-        std::env::var("AST_INDEX_DB_PATH").or_else(|_| std::env::var("KOTLIN_INDEX_DB_PATH"))
-    {
+    if let Ok(path) = std::env::var(ENV_DB_PATH).or_else(|_| std::env::var(ENV_DB_PATH_LEGACY)) {
         return Ok(PathBuf::from(path));
     }
 
     let cache_dir = dirs::cache_dir()
         .context("Could not find cache directory")?
-        .join("ast-index");
+        .join(CACHE_DIR_NAME);
 
     // Canonicalize to handle VFS remounts / symlinks pointing to the same project
     let canonical_root = project_root
@@ -53,7 +77,7 @@ pub fn get_db_path(project_root: &Path) -> Result<PathBuf> {
                         {
                             // Found old DB for this project — migrate
                             let _ = std::fs::create_dir_all(&db_dir);
-                            for suffix in ["index.db", "index.db-wal", "index.db-shm"] {
+                            for suffix in DB_FILE_SUFFIXES {
                                 let src = old_dir.join(suffix);
                                 if src.exists() {
                                     let _ = std::fs::rename(&src, db_dir.join(suffix));
@@ -74,7 +98,7 @@ pub fn get_db_path(project_root: &Path) -> Result<PathBuf> {
 
 /// Deterministic hash (djb2 algorithm) — stable across Rust versions unlike DefaultHasher
 fn simple_hash(s: &str) -> String {
-    let mut hash: u64 = 5381;
+    let mut hash: u64 = DJB2_SEED;
     for byte in s.bytes() {
         hash = hash.wrapping_mul(33).wrapping_add(byte as u64);
     }
@@ -84,7 +108,7 @@ fn simple_hash(s: &str) -> String {
 /// Remove old kotlin-index cache dir entirely
 pub fn cleanup_legacy_cache() {
     if let Some(cache_dir) = dirs::cache_dir() {
-        let old_dir = cache_dir.join("kotlin-index");
+        let old_dir = cache_dir.join(LEGACY_CACHE_DIR_NAME);
         if old_dir.exists() {
             let _ = std::fs::remove_dir_all(&old_dir);
         }
@@ -98,15 +122,15 @@ pub fn migrate_legacy_project(project_root: &Path) {
         None => return,
     };
     let project_hash = simple_hash(project_root.to_string_lossy().as_ref());
-    let old_db_dir = cache_dir.join("kotlin-index").join(&project_hash);
-    let new_db_dir = cache_dir.join("ast-index").join(&project_hash);
+    let old_db_dir = cache_dir.join(LEGACY_CACHE_DIR_NAME).join(&project_hash);
+    let new_db_dir = cache_dir.join(CACHE_DIR_NAME).join(&project_hash);
 
     if !old_db_dir.exists() || new_db_dir.join("index.db").exists() {
         return;
     }
 
     let _ = std::fs::create_dir_all(&new_db_dir);
-    for suffix in ["index.db", "index.db-wal", "index.db-shm"] {
+    for suffix in DB_FILE_SUFFIXES {
         let src = old_db_dir.join(suffix);
         if src.exists() {
             let _ = std::fs::rename(&src, new_db_dir.join(suffix));
@@ -349,8 +373,12 @@ pub fn open_db(project_root: &Path) -> Result<Connection> {
     // journal_mode returns result, use query_row
     let _: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
-    conn.pragma_update(None, "cache_size", "-8000")?; // 8 MB cache to limit memory
-    let _: i64 = conn.query_row("PRAGMA busy_timeout = 5000", [], |row| row.get(0))?; // Wait up to 5s if DB is locked
+    conn.pragma_update(None, "cache_size", SQLITE_CACHE_SIZE)?; // 8 MB cache to limit memory
+    let _: i64 = conn.query_row(
+        &format!("PRAGMA busy_timeout = {}", SQLITE_BUSY_TIMEOUT_MS),
+        [],
+        |row| row.get(0),
+    )?; // Wait up to 5s if DB is locked
 
     // Store project root for hash migration
     conn.execute(
