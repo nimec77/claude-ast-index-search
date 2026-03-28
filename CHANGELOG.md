@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.29.0] - 2026-03-28
+
 ### Changed
 - **DRY/KISS refactoring** — comprehensive code quality pass across the entire codebase:
   - Added `CommandTimer` RAII guard and `open_db_or_return!` macro in new `commands/common.rs`, replacing ~42 manual timing blocks and ~23 DB-open boilerplate blocks across 10 command files (net -123 lines)
