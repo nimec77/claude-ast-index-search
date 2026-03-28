@@ -6,6 +6,19 @@ use cli::{Cli, Commands, find_project_root};
 
 use ast_index::{commands, db};
 
+/// Build a `SearchScope` from the common CLI options.
+fn make_scope<'a>(
+    in_file: Option<&'a str>,
+    module: Option<&'a str>,
+    dir_prefix: Option<&'a str>,
+) -> db::SearchScope<'a> {
+    db::SearchScope {
+        in_file,
+        module,
+        dir_prefix,
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let root = find_project_root()?;
@@ -108,11 +121,7 @@ fn main() -> Result<()> {
             module,
             fuzzy,
         } => {
-            let scope = db::SearchScope {
-                in_file: in_file.as_deref(),
-                module: module.as_deref(),
-                dir_prefix: dir_prefix_ref,
-            };
+            let scope = make_scope(in_file.as_deref(), module.as_deref(), dir_prefix_ref);
             commands::index::cmd_search(&root, &query, limit, format, &scope, fuzzy)
         }
         Commands::Symbol {
@@ -127,11 +136,7 @@ fn main() -> Result<()> {
             if name.is_none() && pattern.is_none() {
                 anyhow::bail!("Either <NAME> or --pattern must be provided");
             }
-            let scope = db::SearchScope {
-                in_file: in_file.as_deref(),
-                module: module.as_deref(),
-                dir_prefix: dir_prefix_ref,
-            };
+            let scope = make_scope(in_file.as_deref(), module.as_deref(), dir_prefix_ref);
             commands::index::cmd_symbol(
                 &root,
                 name.as_deref(),
@@ -154,11 +159,7 @@ fn main() -> Result<()> {
             if name.is_none() && pattern.is_none() {
                 anyhow::bail!("Either <NAME> or --pattern must be provided");
             }
-            let scope = db::SearchScope {
-                in_file: in_file.as_deref(),
-                module: module.as_deref(),
-                dir_prefix: dir_prefix_ref,
-            };
+            let scope = make_scope(in_file.as_deref(), module.as_deref(), dir_prefix_ref);
             commands::index::cmd_class(
                 &root,
                 name.as_deref(),
@@ -175,11 +176,7 @@ fn main() -> Result<()> {
             in_file,
             module,
         } => {
-            let scope = db::SearchScope {
-                in_file: in_file.as_deref(),
-                module: module.as_deref(),
-                dir_prefix: dir_prefix_ref,
-            };
+            let scope = make_scope(in_file.as_deref(), module.as_deref(), dir_prefix_ref);
             commands::index::cmd_implementations(&root, &parent, limit, format, &scope)
         }
         Commands::Refs { symbol, limit } => {
@@ -192,11 +189,7 @@ fn main() -> Result<()> {
             in_file,
             module,
         } => {
-            let scope = db::SearchScope {
-                in_file: in_file.as_deref(),
-                module: module.as_deref(),
-                dir_prefix: dir_prefix_ref,
-            };
+            let scope = make_scope(in_file.as_deref(), module.as_deref(), dir_prefix_ref);
             commands::index::cmd_usages(&root, &symbol, limit, format, &scope)
         }
         // Module commands
