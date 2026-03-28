@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- `--in-file` scope filter now uses contains-matching instead of suffix-only (`LIKE '%term%'` instead of `LIKE '%term'`)
+- `find_implementations` false positives: removed overly broad `LIKE '%Name%'` clause that matched unrelated names (e.g. searching `Map` no longer returns `HashMap`, `TreeMap`)
+- DB path canonicalization for VFS remounts: `canonicalize()` the project root before hashing to prevent duplicate DBs across mount points
+
+### Added
+- `--pattern`/`-p` glob flag for `symbol` and `class` commands (e.g. `symbol --pattern "*Mailer"`, `class -p "*Service*"`)
+- OR queries in `search` command: comma-separated terms return deduplicated results (`search "email,mail"`)
+- Caller detection for `await func()`, `return func()`, `yield func()` patterns in `callers` and `call-tree` commands
+- Ruby bang/question method reference detection (`save!`, `valid?`)
+- Ruby DSL support for Alba serializer (`attribute`) and Dry::Initializer (`option`, `param`)
+- Vue Composition API outline support: `ref()`, `computed()`, `reactive()`, `defineProps`, `defineEmits`, `defineStore`
+
+### Changed
+- Grep commands (`todo`, `callers`, `call-tree`, `deprecated`, `annotations`) now search all indexed source languages via `ALL_SOURCE_EXTENSIONS` (previously limited to ~8 extensions)
+- `search` content scan expanded to the same full extension set (previously ~15 extensions)
+
 ## [3.27.1] - 2026-03-02
 
 - **Rust 2018+ module layout** — converted three `mod.rs` files to file-based modules (`src/commands.rs`, `src/parsers.rs`, `src/parsers/treesitter.rs`); no behavioral changes.
