@@ -32,8 +32,8 @@ fn main() -> Result<()> {
     let dir_prefix = if cwd != root {
         cwd.strip_prefix(&root).ok().map(|rel| {
             let mut s = rel.to_string_lossy().to_string();
-            if !s.ends_with('/') {
-                s.push('/');
+            if !s.ends_with(std::path::MAIN_SEPARATOR) {
+                s.push(std::path::MAIN_SEPARATOR);
             }
             s
         })
