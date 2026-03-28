@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- **DRY/KISS refactoring** — comprehensive code quality pass across the entire codebase:
+  - Added `CommandTimer` RAII guard and `open_db_or_return!` macro in new `commands/common.rs`, replacing ~42 manual timing blocks and ~23 DB-open boilerplate blocks across 10 command files (net -123 lines)
+  - Added `CaptureIndexer` struct in `treesitter.rs`, replacing 14 identical capture-index closures across all tree-sitter parsers (net -85 lines)
+  - Extracted `CLASS_LIKE_KINDS` constant and `collect_query_params`/`params_as_refs` helpers in `queries.rs`, eliminating duplicated SQL kind lists and param-building boilerplate
+  - Consolidated `get_stats()` from 8 separate `SELECT COUNT(*)` queries into a single query
+  - Extracted 8 named constants in `db.rs` (`DB_FILE_SUFFIXES`, `CACHE_DIR_NAME`, `DJB2_SEED`, `SQLITE_CACHE_SIZE`, `SQLITE_BUSY_TIMEOUT_MS`, etc.)
+  - Extracted 5 default-limit constants in `cli.rs` (`DEFAULT_LIMIT`, `DEFAULT_LIMIT_SMALL`, `DEFAULT_CALL_DEPTH`, `DEFAULT_PER_DIR`, `DEFAULT_TODO_PATTERN`), replacing ~33 hardcoded `default_value` strings
+  - Extracted 5 progress-interval constants in `indexer.rs` (`WALK_PROGRESS_INTERVAL`, `PARSE_PROGRESS_INTERVAL`, `NODE_MODULES_MAX_DEPTH`, etc.)
+  - Data-driven project root detection: `PROJECT_ROOT_MARKERS` array replaces sequential if-exists checks in `find_project_root()`
+  - Deduplicated `SearchScope` construction via `make_scope()` helper in `main.rs`
+  - Deduplicated excluded directory list: `watch.rs` now references `indexer::EXCLUDED_DIRS`
+  - Replaced hardcoded `'/'` path separator with `std::path::MAIN_SEPARATOR`
+
 ## [3.28.0] - 2026-03-28
 
 ### Changed
