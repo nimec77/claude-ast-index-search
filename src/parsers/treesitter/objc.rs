@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Node, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -26,21 +26,15 @@ impl LanguageParser for ObjcParser {
         let mut cursor = QueryCursor::new();
         let query = &*OBJC_QUERY;
 
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_class_interface = idx("class_interface");
-        let idx_protocol_decl = idx("protocol_decl");
-        let idx_class_impl = idx("class_impl");
-        let idx_method_decl = idx("method_decl");
-        let idx_method_def = idx("method_def");
-        let idx_property_decl = idx("property_decl");
-        let idx_typedef_decl = idx("typedef_decl");
+        let idx_class_interface = idx.get("class_interface");
+        let idx_protocol_decl = idx.get("protocol_decl");
+        let idx_class_impl = idx.get("class_impl");
+        let idx_method_decl = idx.get("method_decl");
+        let idx_method_def = idx.get("method_def");
+        let idx_property_decl = idx.get("property_decl");
+        let idx_typedef_decl = idx.get("typedef_decl");
 
         // Track class names from @interface to avoid duplicating from @implementation
         let mut interface_names = std::collections::HashSet::new();

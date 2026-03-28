@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -26,29 +26,23 @@ impl LanguageParser for PythonParser {
         let query = &*PY_QUERY;
         let mut cursor = QueryCursor::new();
 
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_import_name = idx("import_name");
-        let idx_import_from_module = idx("import_from_module");
-        let idx_import_from_name = idx("import_from_name");
-        let idx_import_from_module_alias = idx("import_from_module_alias");
-        let idx_import_from_aliased_name = idx("import_from_aliased_name");
-        let idx_class_name = idx("class_name");
-        let idx_class_parents = idx("class_parents");
-        let idx_decorator = idx("decorator");
-        let idx_func_decorator = idx("func_decorator");
-        let idx_func_name = idx("func_name");
-        let idx_decorated_func_name = idx("decorated_func_name");
-        let idx_method_name = idx("method_name");
-        let idx_decorated_method_name = idx("decorated_method_name");
-        let idx_assignment_name = idx("assignment_name");
-        let idx_assignment_value = idx("assignment_value");
+        let idx_import_name = idx.get("import_name");
+        let idx_import_from_module = idx.get("import_from_module");
+        let idx_import_from_name = idx.get("import_from_name");
+        let idx_import_from_module_alias = idx.get("import_from_module_alias");
+        let idx_import_from_aliased_name = idx.get("import_from_aliased_name");
+        let idx_class_name = idx.get("class_name");
+        let idx_class_parents = idx.get("class_parents");
+        let idx_decorator = idx.get("decorator");
+        let idx_func_decorator = idx.get("func_decorator");
+        let idx_func_name = idx.get("func_name");
+        let idx_decorated_func_name = idx.get("decorated_func_name");
+        let idx_method_name = idx.get("method_name");
+        let idx_decorated_method_name = idx.get("decorated_method_name");
+        let idx_assignment_name = idx.get("assignment_name");
+        let idx_assignment_value = idx.get("assignment_value");
 
         let mut emitted_classes = std::collections::HashSet::new();
         let mut emitted_funcs = std::collections::HashSet::new();

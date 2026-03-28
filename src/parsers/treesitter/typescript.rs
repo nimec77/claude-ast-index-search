@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -196,79 +196,73 @@ impl LanguageParser for TypeScriptParser {
         let query = &*TS_QUERY;
         let mut cursor = QueryCursor::new();
 
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
         // Class captures
-        let idx_class_name = idx("class_name");
-        let idx_class_node = idx("class_node");
-        let idx_abstract_class_name = idx("abstract_class_name");
-        let idx_abstract_class_node = idx("abstract_class_node");
-        let idx_export_class_name = idx("export_class_name");
-        let idx_export_class_node = idx("export_class_node");
-        let idx_export_abstract_class_name = idx("export_abstract_class_name");
-        let idx_export_abstract_class_node = idx("export_abstract_class_node");
+        let idx_class_name = idx.get("class_name");
+        let idx_class_node = idx.get("class_node");
+        let idx_abstract_class_name = idx.get("abstract_class_name");
+        let idx_abstract_class_node = idx.get("abstract_class_node");
+        let idx_export_class_name = idx.get("export_class_name");
+        let idx_export_class_node = idx.get("export_class_node");
+        let idx_export_abstract_class_name = idx.get("export_abstract_class_name");
+        let idx_export_abstract_class_node = idx.get("export_abstract_class_node");
 
         // Interface captures
-        let idx_interface_name = idx("interface_name");
-        let idx_interface_node = idx("interface_node");
-        let idx_export_interface_name = idx("export_interface_name");
-        let idx_export_interface_node = idx("export_interface_node");
+        let idx_interface_name = idx.get("interface_name");
+        let idx_interface_node = idx.get("interface_node");
+        let idx_export_interface_name = idx.get("export_interface_name");
+        let idx_export_interface_node = idx.get("export_interface_node");
 
         // Type alias captures
-        let idx_type_alias_name = idx("type_alias_name");
-        let idx_export_type_alias_name = idx("export_type_alias_name");
+        let idx_type_alias_name = idx.get("type_alias_name");
+        let idx_export_type_alias_name = idx.get("export_type_alias_name");
 
         // Enum captures
-        let idx_enum_name = idx("enum_name");
-        let idx_export_enum_name = idx("export_enum_name");
+        let idx_enum_name = idx.get("enum_name");
+        let idx_export_enum_name = idx.get("export_enum_name");
 
         // Function captures
-        let idx_func_name = idx("func_name");
-        let idx_export_func_name = idx("export_func_name");
+        let idx_func_name = idx.get("func_name");
+        let idx_export_func_name = idx.get("export_func_name");
 
         // Arrow function captures
-        let idx_arrow_func_name = idx("arrow_func_name");
-        let idx_export_arrow_func_name = idx("export_arrow_func_name");
+        let idx_arrow_func_name = idx.get("arrow_func_name");
+        let idx_export_arrow_func_name = idx.get("export_arrow_func_name");
 
         // Constant captures
-        let idx_const_name = idx("const_name");
-        let idx_export_const_name = idx("export_const_name");
+        let idx_const_name = idx.get("const_name");
+        let idx_export_const_name = idx.get("export_const_name");
 
         // Namespace captures
-        let idx_namespace_name = idx("namespace_name");
-        let idx_export_namespace_name = idx("export_namespace_name");
+        let idx_namespace_name = idx.get("namespace_name");
+        let idx_export_namespace_name = idx.get("export_namespace_name");
 
         // Ambient const captures (declare const without value)
-        let idx_export_ambient_const_name = idx("export_ambient_const_name");
+        let idx_export_ambient_const_name = idx.get("export_ambient_const_name");
 
         // Import captures
-        let idx_import_source = idx("import_source");
+        let idx_import_source = idx.get("import_source");
 
         // Decorator captures
-        let idx_decorator_id = idx("decorator_id");
-        let idx_decorator_call_id = idx("decorator_call_id");
+        let idx_decorator_id = idx.get("decorator_id");
+        let idx_decorator_call_id = idx.get("decorator_call_id");
 
         // Method captures
-        let idx_method_name = idx("method_name");
-        let idx_method_node = idx("method_node");
-        let idx_private_method_name = idx("private_method_name");
-        let idx_private_method_node = idx("private_method_node");
+        let idx_method_name = idx.get("method_name");
+        let idx_method_node = idx.get("method_node");
+        let idx_private_method_name = idx.get("private_method_name");
+        let idx_private_method_node = idx.get("private_method_node");
 
         // Field captures
-        let idx_field_name = idx("field_name");
-        let idx_field_node = idx("field_node");
-        let idx_private_field_name = idx("private_field_name");
-        let idx_private_field_node = idx("private_field_node");
+        let idx_field_name = idx.get("field_name");
+        let idx_field_node = idx.get("field_node");
+        let idx_private_field_name = idx.get("private_field_name");
+        let idx_private_field_node = idx.get("private_field_node");
 
         // Abstract method captures
-        let idx_abstract_method_name = idx("abstract_method_name");
-        let idx_abstract_method_node = idx("abstract_method_node");
+        let idx_abstract_method_name = idx.get("abstract_method_name");
+        let idx_abstract_method_node = idx.get("abstract_method_node");
 
         // Track emitted symbols to avoid duplicates
         let mut emitted_lines: std::collections::HashSet<(String, usize)> =

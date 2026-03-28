@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -26,30 +26,24 @@ impl LanguageParser for PhpParser {
         let query = &*PHP_QUERY;
         let mut cursor = QueryCursor::new();
 
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_namespace_name = idx("namespace_name");
-        let idx_class_name = idx("class_name");
-        let idx_class_parent = idx("class_parent");
-        let idx_class_interface = idx("class_interface");
-        let idx_interface_name = idx("interface_name");
-        let idx_interface_parent = idx("interface_parent");
-        let idx_trait_name = idx("trait_name");
-        let idx_enum_name = idx("enum_name");
-        let idx_func_name = idx("func_name");
-        let idx_method_name = idx("method_name");
-        let idx_const_name = idx("const_name");
-        let idx_prop_name = idx("prop_name");
-        let idx_use_name = idx("use_name");
-        let idx_use_simple_name = idx("use_simple_name");
-        let idx_trait_use_qualified = idx("trait_use_qualified");
-        let idx_trait_use_name = idx("trait_use_name");
+        let idx_namespace_name = idx.get("namespace_name");
+        let idx_class_name = idx.get("class_name");
+        let idx_class_parent = idx.get("class_parent");
+        let idx_class_interface = idx.get("class_interface");
+        let idx_interface_name = idx.get("interface_name");
+        let idx_interface_parent = idx.get("interface_parent");
+        let idx_trait_name = idx.get("trait_name");
+        let idx_enum_name = idx.get("enum_name");
+        let idx_func_name = idx.get("func_name");
+        let idx_method_name = idx.get("method_name");
+        let idx_const_name = idx.get("const_name");
+        let idx_prop_name = idx.get("prop_name");
+        let idx_use_name = idx.get("use_name");
+        let idx_use_simple_name = idx.get("use_simple_name");
+        let idx_trait_use_qualified = idx.get("trait_use_qualified");
+        let idx_trait_use_name = idx.get("trait_use_name");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 

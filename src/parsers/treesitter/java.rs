@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -69,28 +69,22 @@ impl LanguageParser for JavaParser {
         let query = &*JAVA_QUERY;
         let mut cursor = QueryCursor::new();
 
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_class_name = idx("class_name");
-        let idx_class_node = idx("class_node");
-        let idx_interface_name = idx("interface_name");
-        let idx_interface_node = idx("interface_node");
-        let idx_enum_name = idx("enum_name");
-        let idx_enum_node = idx("enum_node");
-        let idx_method_name = idx("method_name");
-        let idx_method_node = idx("method_node");
-        let idx_constructor_name = idx("constructor_name");
-        let idx_constructor_node = idx("constructor_node");
-        let idx_field_name = idx("field_name");
-        let idx_field_node = idx("field_node");
-        let idx_annotation_name = idx("annotation_name");
-        let idx_annotation_call_name = idx("annotation_call_name");
+        let idx_class_name = idx.get("class_name");
+        let idx_class_node = idx.get("class_node");
+        let idx_interface_name = idx.get("interface_name");
+        let idx_interface_node = idx.get("interface_node");
+        let idx_enum_name = idx.get("enum_name");
+        let idx_enum_node = idx.get("enum_node");
+        let idx_method_name = idx.get("method_name");
+        let idx_method_node = idx.get("method_node");
+        let idx_constructor_name = idx.get("constructor_name");
+        let idx_constructor_node = idx.get("constructor_node");
+        let idx_field_name = idx.get("field_name");
+        let idx_field_node = idx.get("field_node");
+        let idx_annotation_name = idx.get("annotation_name");
+        let idx_annotation_call_name = idx.get("annotation_call_name");
 
         let mut emitted: std::collections::HashSet<(String, usize)> =
             std::collections::HashSet::new();

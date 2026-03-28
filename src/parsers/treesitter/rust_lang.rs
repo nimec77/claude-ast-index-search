@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -61,30 +61,24 @@ impl LanguageParser for RustParser {
         let query = &*RUST_QUERY;
 
         // Build capture name -> index map
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_struct_name = idx("struct_name");
-        let idx_enum_name = idx("enum_name");
-        let idx_trait_name = idx("trait_name");
-        let idx_impl_trait = idx("impl_trait");
-        let idx_impl_trait_type = idx("impl_trait_type");
-        let idx_impl_self_type = idx("impl_self_type");
-        let idx_func_name = idx("func_name");
-        let idx_func_sig_name = idx("func_sig_name");
-        let idx_macro_name = idx("macro_name");
-        let idx_type_alias_name = idx("type_alias_name");
-        let idx_const_name = idx("const_name");
-        let idx_static_name = idx("static_name");
-        let idx_mod_name = idx("mod_name");
-        let idx_use_path = idx("use_path");
-        let idx_use_alias_path = idx("use_alias_path");
-        let idx_attr = idx("attr");
+        let idx_struct_name = idx.get("struct_name");
+        let idx_enum_name = idx.get("enum_name");
+        let idx_trait_name = idx.get("trait_name");
+        let idx_impl_trait = idx.get("impl_trait");
+        let idx_impl_trait_type = idx.get("impl_trait_type");
+        let idx_impl_self_type = idx.get("impl_self_type");
+        let idx_func_name = idx.get("func_name");
+        let idx_func_sig_name = idx.get("func_sig_name");
+        let idx_macro_name = idx.get("macro_name");
+        let idx_type_alias_name = idx.get("type_alias_name");
+        let idx_const_name = idx.get("const_name");
+        let idx_static_name = idx.get("static_name");
+        let idx_mod_name = idx.get("mod_name");
+        let idx_use_path = idx.get("use_path");
+        let idx_use_alias_path = idx.get("use_alias_path");
+        let idx_attr = idx.get("attr");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 

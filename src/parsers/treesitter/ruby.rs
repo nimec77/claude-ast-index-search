@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::{ParsedRef, ParsedSymbol};
 
@@ -28,23 +28,17 @@ impl LanguageParser for RubyParser {
         let query = &*RUBY_QUERY;
         let mut cursor = QueryCursor::new();
 
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_class_name = idx("class_name");
-        let idx_class_parent = idx("class_parent");
-        let idx_module_name = idx("module_name");
-        let idx_method_name = idx("method_name");
-        let idx_singleton_object = idx("singleton_object");
-        let idx_singleton_method_name = idx("singleton_method_name");
-        let idx_assign_const_name = idx("assign_const_name");
-        let idx_call_method = idx("call_method");
-        let idx_call_first_arg = idx("call_first_arg");
+        let idx_class_name = idx.get("class_name");
+        let idx_class_parent = idx.get("class_parent");
+        let idx_module_name = idx.get("module_name");
+        let idx_method_name = idx.get("method_name");
+        let idx_singleton_object = idx.get("singleton_object");
+        let idx_singleton_method_name = idx.get("singleton_method_name");
+        let idx_assign_const_name = idx.get("assign_const_name");
+        let idx_call_method = idx.get("call_method");
+        let idx_call_first_arg = idx.get("call_first_arg");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 

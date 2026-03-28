@@ -14,7 +14,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -37,42 +37,36 @@ impl LanguageParser for CppParser {
         let query = &*CPP_QUERY;
 
         // Build capture name -> index map
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
         // Class/struct captures
-        let idx_class_name = idx("class_name");
-        let idx_class_node = idx("class_node");
-        let idx_struct_name = idx("struct_name");
-        let idx_struct_node = idx("struct_node");
-        let idx_template_class_name = idx("template_class_name");
-        let idx_template_class_node = idx("template_class_node");
-        let idx_template_struct_name = idx("template_struct_name");
-        let idx_template_struct_node = idx("template_struct_node");
+        let idx_class_name = idx.get("class_name");
+        let idx_class_node = idx.get("class_node");
+        let idx_struct_name = idx.get("struct_name");
+        let idx_struct_node = idx.get("struct_node");
+        let idx_template_class_name = idx.get("template_class_name");
+        let idx_template_class_node = idx.get("template_class_node");
+        let idx_template_struct_name = idx.get("template_struct_name");
+        let idx_template_struct_node = idx.get("template_struct_node");
 
         // Function captures
-        let idx_func_name = idx("func_name");
-        let idx_template_func_name = idx("template_func_name");
-        let idx_method_class = idx("method_class");
-        let idx_method_name = idx("method_name");
-        let idx_template_method_class = idx("template_method_class");
-        let idx_template_method_name = idx("template_method_name");
-        let idx_destructor_class = idx("destructor_class");
-        let idx_destructor_name = idx("destructor_name");
+        let idx_func_name = idx.get("func_name");
+        let idx_template_func_name = idx.get("template_func_name");
+        let idx_method_class = idx.get("method_class");
+        let idx_method_name = idx.get("method_name");
+        let idx_template_method_class = idx.get("template_method_class");
+        let idx_template_method_name = idx.get("template_method_name");
+        let idx_destructor_class = idx.get("destructor_class");
+        let idx_destructor_name = idx.get("destructor_name");
 
         // Other captures
-        let idx_namespace_name = idx("namespace_name");
-        let idx_enum_name = idx("enum_name");
-        let idx_typedef_name = idx("typedef_name");
-        let idx_typedef_node = idx("typedef_node");
-        let idx_using_alias_name = idx("using_alias_name");
-        let idx_macro_name = idx("macro_name");
-        let idx_include_path = idx("include_path");
+        let idx_namespace_name = idx.get("namespace_name");
+        let idx_enum_name = idx.get("enum_name");
+        let idx_typedef_name = idx.get("typedef_name");
+        let idx_typedef_node = idx.get("typedef_node");
+        let idx_using_alias_name = idx.get("using_alias_name");
+        let idx_macro_name = idx.get("macro_name");
+        let idx_include_path = idx.get("include_path");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 

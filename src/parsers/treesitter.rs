@@ -111,25 +111,24 @@ pub(crate) fn find_capture<'a>(
 /// let idx_class = idx.get("class_name");
 /// // then: find_capture(m, idx_class)
 /// ```
-#[allow(dead_code)]
 pub(crate) struct CaptureIndexer {
     names: Vec<String>,
 }
 
-#[allow(dead_code)]
 impl CaptureIndexer {
     pub fn new(query: &Query) -> Self {
         Self {
-            names: query.capture_names().iter().map(|n| n.to_string()).collect(),
+            names: query
+                .capture_names()
+                .iter()
+                .map(|n| n.to_string())
+                .collect(),
         }
     }
 
     /// Look up the index for a capture name. Returns `None` if the name
     /// is not present in the query (which `find_capture` handles gracefully).
     pub fn get(&self, name: &str) -> Option<u32> {
-        self.names
-            .iter()
-            .position(|n| n == name)
-            .map(|i| i as u32)
+        self.names.iter().position(|n| n == name).map(|i| i as u32)
     }
 }

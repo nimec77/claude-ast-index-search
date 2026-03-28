@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -27,28 +27,22 @@ impl LanguageParser for GoParser {
         let query = &*GO_QUERY;
 
         // Build capture name → index map
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_package = idx("package");
-        let idx_import_alias = idx("import_alias");
-        let idx_import_path = idx("import_path");
-        let idx_struct_name = idx("struct_name");
-        let idx_interface_name = idx("interface_name");
-        let idx_type_alias_name = idx("type_alias_name");
-        let idx_type_alias_target = idx("type_alias_target");
-        let idx_func_name = idx("func_name");
-        let idx_method_receiver = idx("method_receiver");
-        let idx_method_name = idx("method_name");
-        let idx_method_receiver_value = idx("method_receiver_value");
-        let idx_method_name_value = idx("method_name_value");
-        let idx_const_name = idx("const_name");
-        let idx_var_name = idx("var_name");
+        let idx_package = idx.get("package");
+        let idx_import_alias = idx.get("import_alias");
+        let idx_import_path = idx.get("import_path");
+        let idx_struct_name = idx.get("struct_name");
+        let idx_interface_name = idx.get("interface_name");
+        let idx_type_alias_name = idx.get("type_alias_name");
+        let idx_type_alias_target = idx.get("type_alias_target");
+        let idx_func_name = idx.get("func_name");
+        let idx_method_receiver = idx.get("method_receiver");
+        let idx_method_name = idx.get("method_name");
+        let idx_method_receiver_value = idx.get("method_receiver_value");
+        let idx_method_name_value = idx.get("method_name_value");
+        let idx_const_name = idx.get("const_name");
+        let idx_var_name = idx.get("var_name");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 

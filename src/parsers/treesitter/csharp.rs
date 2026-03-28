@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -231,32 +231,26 @@ impl LanguageParser for CSharpParser {
         let query = &*CSHARP_QUERY;
 
         // Build capture name -> index map
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_namespace_name = idx("namespace_name");
-        let idx_using_dir = idx("using_dir");
-        let idx_class_name = idx("class_name");
-        let idx_class_decl = idx("class_decl");
-        let idx_interface_name = idx("interface_name");
-        let idx_interface_decl = idx("interface_decl");
-        let idx_struct_name = idx("struct_name");
-        let idx_record_name = idx("record_name");
-        let idx_record_decl = idx("record_decl");
-        let idx_enum_name = idx("enum_name");
-        let idx_method_name = idx("method_name");
-        let idx_constructor_name = idx("constructor_name");
-        let idx_property_name = idx("property_name");
-        let idx_field_decl = idx("field_decl");
-        let idx_event_field_decl = idx("event_field_decl");
-        let idx_event_name = idx("event_name");
-        let idx_delegate_name = idx("delegate_name");
-        let idx_attr_name = idx("attr_name");
+        let idx_namespace_name = idx.get("namespace_name");
+        let idx_using_dir = idx.get("using_dir");
+        let idx_class_name = idx.get("class_name");
+        let idx_class_decl = idx.get("class_decl");
+        let idx_interface_name = idx.get("interface_name");
+        let idx_interface_decl = idx.get("interface_decl");
+        let idx_struct_name = idx.get("struct_name");
+        let idx_record_name = idx.get("record_name");
+        let idx_record_decl = idx.get("record_decl");
+        let idx_enum_name = idx.get("enum_name");
+        let idx_method_name = idx.get("method_name");
+        let idx_constructor_name = idx.get("constructor_name");
+        let idx_property_name = idx.get("property_name");
+        let idx_field_decl = idx.get("field_decl");
+        let idx_event_field_decl = idx.get("event_field_decl");
+        let idx_event_name = idx.get("event_name");
+        let idx_delegate_name = idx.get("delegate_name");
+        let idx_attr_name = idx.get("attr_name");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 

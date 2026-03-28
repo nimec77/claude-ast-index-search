@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -26,29 +26,23 @@ impl LanguageParser for ScalaParser {
         let query = &*SCALA_QUERY;
         let mut cursor = QueryCursor::new();
 
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_class_name = idx("class_name");
-        let idx_class_decl = idx("class_decl");
-        let idx_object_name = idx("object_name");
-        let idx_object_decl = idx("object_decl");
-        let idx_trait_name = idx("trait_name");
-        let idx_trait_decl = idx("trait_decl");
-        let idx_enum_name = idx("enum_name");
-        let idx_func_name = idx("func_name");
-        let idx_func_decl_name = idx("func_decl_name");
-        let idx_val_name = idx("val_name");
-        let idx_val_decl_name = idx("val_decl_name");
-        let idx_var_name = idx("var_name");
-        let idx_var_decl_name = idx("var_decl_name");
-        let idx_type_name = idx("type_name");
-        let idx_given_name = idx("given_name");
+        let idx_class_name = idx.get("class_name");
+        let idx_class_decl = idx.get("class_decl");
+        let idx_object_name = idx.get("object_name");
+        let idx_object_decl = idx.get("object_decl");
+        let idx_trait_name = idx.get("trait_name");
+        let idx_trait_decl = idx.get("trait_decl");
+        let idx_enum_name = idx.get("enum_name");
+        let idx_func_name = idx.get("func_name");
+        let idx_func_decl_name = idx.get("func_decl_name");
+        let idx_val_name = idx.get("val_name");
+        let idx_val_decl_name = idx.get("val_decl_name");
+        let idx_var_name = idx.get("var_name");
+        let idx_var_decl_name = idx.get("var_decl_name");
+        let idx_type_name = idx.get("type_name");
+        let idx_given_name = idx.get("given_name");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 

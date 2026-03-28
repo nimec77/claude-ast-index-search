@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -26,21 +26,15 @@ impl LanguageParser for KotlinParser {
         let query = &*KT_QUERY;
         let mut cursor = QueryCursor::new();
 
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_class_name = idx("class_name");
-        let idx_class_decl = idx("class_decl");
-        let idx_object_name = idx("object_name");
-        let idx_object_decl = idx("object_decl");
-        let idx_func_name = idx("func_name");
-        let idx_property_name = idx("property_name");
-        let idx_typealias_name = idx("typealias_name");
+        let idx_class_name = idx.get("class_name");
+        let idx_class_decl = idx.get("class_decl");
+        let idx_object_name = idx.get("object_name");
+        let idx_object_decl = idx.get("object_decl");
+        let idx_func_name = idx.get("func_name");
+        let idx_property_name = idx.get("property_name");
+        let idx_typealias_name = idx.get("typealias_name");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 

@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -27,23 +27,17 @@ impl LanguageParser for SwiftParser {
         let query = &*SWIFT_QUERY;
 
         // Build capture name -> index map
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_decl_kind = idx("decl_kind");
-        let idx_class_name = idx("class_name");
-        let idx_enum_name = idx("enum_name");
-        let idx_ext_type = idx("ext_type");
-        let idx_protocol_name = idx("protocol_name");
-        let idx_func_name = idx("func_name");
-        let idx_init_name = idx("init_name");
-        let idx_prop_name = idx("prop_name");
-        let idx_typealias_name = idx("typealias_name");
+        let idx_decl_kind = idx.get("decl_kind");
+        let idx_class_name = idx.get("class_name");
+        let idx_enum_name = idx.get("enum_name");
+        let idx_ext_type = idx.get("ext_type");
+        let idx_protocol_name = idx.get("protocol_name");
+        let idx_func_name = idx.get("func_name");
+        let idx_init_name = idx.get("init_name");
+        let idx_prop_name = idx.get("prop_name");
+        let idx_typealias_name = idx.get("typealias_name");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 

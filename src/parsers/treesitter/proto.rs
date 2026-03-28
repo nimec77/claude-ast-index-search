@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
-use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
+use super::{CaptureIndexer, LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
 use crate::parsers::ParsedSymbol;
 
@@ -26,21 +26,15 @@ impl LanguageParser for ProtoParser {
         let query = &*PROTO_QUERY;
         let mut cursor = QueryCursor::new();
 
-        let capture_names = query.capture_names();
-        let idx = |name: &str| -> Option<u32> {
-            capture_names
-                .iter()
-                .position(|n| *n == name)
-                .map(|i| i as u32)
-        };
+        let idx = CaptureIndexer::new(query);
 
-        let idx_package_name = idx("package_name");
-        let idx_option_name = idx("option_name");
-        let idx_option_value = idx("option_value");
-        let idx_service_name = idx("service_name");
-        let idx_rpc_name = idx("rpc_name");
-        let idx_rpc_request_type = idx("rpc_request_type");
-        let idx_rpc_response_type = idx("rpc_response_type");
+        let idx_package_name = idx.get("package_name");
+        let idx_option_name = idx.get("option_name");
+        let idx_option_value = idx.get("option_value");
+        let idx_service_name = idx.get("service_name");
+        let idx_rpc_name = idx.get("rpc_name");
+        let idx_rpc_request_type = idx.get("rpc_request_type");
+        let idx_rpc_response_type = idx.get("rpc_response_type");
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 
