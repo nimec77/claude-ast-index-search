@@ -12,6 +12,7 @@
 
 pub mod analysis;
 pub mod android;
+pub mod common;
 pub mod files;
 pub mod grep;
 pub mod index;
