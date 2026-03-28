@@ -10,15 +10,17 @@
 
 use std::collections::HashSet;
 use std::path::Path;
-use std::time::Instant;
 
 use anyhow::Result;
 use colored::Colorize;
+
+use super::common::CommandTimer;
 use regex::Regex;
 use rusqlite::{Connection, params};
 
 use super::{relative_path, search_files};
 use crate::db::{self, SearchScope};
+use crate::open_db_or_return;
 
 /// Full-text search across files, symbols, and file contents
 pub fn cmd_search(
@@ -29,12 +31,9 @@ pub fn cmd_search(
     scope: &SearchScope,
     fuzzy: bool,
 ) -> Result<()> {
-    let total_start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     // Support comma-separated OR queries
     let terms: Vec<&str> = query
@@ -55,7 +54,6 @@ pub fn cmd_search(
     let mut seen_content: HashSet<(String, usize)> = HashSet::new(); // (path, line)
 
     // 1. Search in file paths (index)
-    let files_start = Instant::now();
     for term in &terms {
         for f in db::find_files(&conn, term, limit)? {
             if let Some(prefix) = scope.dir_prefix
@@ -68,10 +66,8 @@ pub fn cmd_search(
             }
         }
     }
-    let files_time = files_start.elapsed();
 
     // 2. Search in symbols using FTS or fuzzy (index)
-    let symbols_start = Instant::now();
     for term in &terms {
         let batch = if fuzzy {
             db::search_symbols_fuzzy(&conn, term, limit)?
@@ -85,10 +81,8 @@ pub fn cmd_search(
             }
         }
     }
-    let symbols_time = symbols_start.elapsed();
 
     // 3. Search in references (imports and usages from index)
-    let refs_start = Instant::now();
     for term in &terms {
         for r in db::search_refs(&conn, term, limit)? {
             if seen_refs.insert(r.0.clone()) {
@@ -96,10 +90,8 @@ pub fn cmd_search(
             }
         }
     }
-    let refs_time = refs_start.elapsed();
 
     // 4. Search in file contents (grep)
-    let content_start = Instant::now();
     let pattern = terms
         .iter()
         .map(|t| regex::escape(t))
@@ -135,7 +127,6 @@ pub fn cmd_search(
             }
         },
     )?;
-    let content_time = content_start.elapsed();
 
     if format == "json" {
         let result = serde_json::json!({
@@ -198,19 +189,6 @@ pub fn cmd_search(
         println!("  No results found.");
     }
 
-    // Timing breakdown
-    eprintln!(
-        "\n{}",
-        format!(
-            "Time: {:?} (files: {:?}, symbols: {:?}, refs: {:?}, content: {:?})",
-            total_start.elapsed(),
-            files_time,
-            symbols_time,
-            refs_time,
-            content_time
-        )
-        .dimmed()
-    );
     Ok(())
 }
 
@@ -226,12 +204,9 @@ pub fn cmd_symbol(
     scope: &SearchScope,
     fuzzy: bool,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     let (symbols, display_name) = if let Some(pat) = pattern {
         (
@@ -271,7 +246,6 @@ pub fn cmd_symbol(
         println!("  No symbols found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -285,12 +259,9 @@ pub fn cmd_class(
     scope: &SearchScope,
     fuzzy: bool,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     let (results, display_name) = if let Some(pat) = pattern {
         (
@@ -338,7 +309,6 @@ pub fn cmd_class(
         println!("  No classes found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -350,12 +320,9 @@ pub fn cmd_implementations(
     format: &str,
     scope: &SearchScope,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
     let impls = if scope.is_empty() {
         db::find_implementations(&conn, parent, limit)?
     } else {
@@ -394,18 +361,14 @@ pub fn cmd_implementations(
         println!("  No implementations found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Show cross-references: definitions, imports, usages
 pub fn cmd_refs(root: &Path, symbol: &str, limit: usize, format: &str) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
     let (definitions, imports, usages) = db::find_cross_references(&conn, symbol, limit)?;
 
     if format == "json" {
@@ -452,18 +415,14 @@ pub fn cmd_refs(root: &Path, symbol: &str, limit: usize, format: &str) -> Result
         println!("  No references found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Show class hierarchy (parents and children)
 pub fn cmd_hierarchy(root: &Path, name: &str) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     // Find the class/interface/package
     let classes = db::find_symbols_by_name(&conn, name, Some("class"), 1)?;
@@ -508,7 +467,6 @@ pub fn cmd_hierarchy(root: &Path, name: &str) -> Result<()> {
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -520,7 +478,7 @@ pub fn cmd_usages(
     format: &str,
     scope: &SearchScope,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     // Try to use index first
     let db_path = db::get_db_path(root)?;
@@ -562,10 +520,6 @@ pub fn cmd_usages(
                 println!("  No usages found in index.");
             }
 
-            eprintln!(
-                "\n{}",
-                format!("Time: {:?} (indexed)", start.elapsed()).dimmed()
-            );
             return Ok(());
         }
     }
@@ -628,9 +582,5 @@ pub fn cmd_usages(
         println!("  No usages found.");
     }
 
-    eprintln!(
-        "\n{}",
-        format!("Time: {:?} (grep)", start.elapsed()).dimmed()
-    );
     Ok(())
 }

@@ -10,23 +10,21 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::Instant;
 
 use anyhow::Result;
 use colored::Colorize;
+
+use super::common::CommandTimer;
 use regex::Regex;
 
 use super::{relative_path, search_files};
-use crate::db;
+use crate::open_db_or_return;
 
 /// Find storyboard usages of a class
 pub fn cmd_storyboard_usages(root: &Path, class_name: &str, module: Option<&str>) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     let query = if let Some(m) = module {
         format!(
@@ -99,7 +97,6 @@ pub fn cmd_storyboard_usages(root: &Path, class_name: &str, module: Option<&str>
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -111,12 +108,9 @@ pub fn cmd_asset_usages(
     asset_type: Option<&str>,
     unused: bool,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     if unused {
         // Find unused assets
@@ -224,13 +218,12 @@ pub fn cmd_asset_usages(
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find SwiftUI state properties (@State, @Binding, @Published, etc.)
 pub fn cmd_swiftui(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     // Search for SwiftUI state properties: @State, @Binding, @Published, @ObservedObject, @StateObject, @EnvironmentObject
     let pattern = r"@(State|Binding|Published|ObservedObject|StateObject|EnvironmentObject)\s+(private\s+)?(var|let)\s+\w+";
@@ -292,13 +285,12 @@ pub fn cmd_swiftui(root: &Path, query: Option<&str>, limit: usize) -> Result<()>
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find Swift async functions
 pub fn cmd_async_funcs(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     // Search for async functions in Swift
     let pattern = r"func\s+\w+[^{]*\basync\b";
@@ -332,13 +324,12 @@ pub fn cmd_async_funcs(root: &Path, query: Option<&str>, limit: usize) -> Result
         println!("  {}: {}:{}", func_name.cyan(), path, line_num);
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find Combine publishers (PassthroughSubject, CurrentValueSubject, AnyPublisher)
 pub fn cmd_publishers(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     // Search for Combine publishers: PassthroughSubject, CurrentValueSubject, AnyPublisher, Published
     let pattern = r"(PassthroughSubject|CurrentValueSubject|AnyPublisher|@Published)\s*[<(]";
@@ -384,13 +375,12 @@ pub fn cmd_publishers(root: &Path, query: Option<&str>, limit: usize) -> Result<
         println!("    {}", content.dimmed());
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find @MainActor usages
 pub fn cmd_main_actor(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     // Search for @MainActor
     let pattern = r"@MainActor";
@@ -423,6 +413,5 @@ pub fn cmd_main_actor(root: &Path, query: Option<&str>, limit: usize) -> Result<
         println!("    {}", content);
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }

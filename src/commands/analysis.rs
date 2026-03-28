@@ -3,13 +3,15 @@
 //! - unused-symbols: Find potentially unused public symbols
 
 use std::path::Path;
-use std::time::Instant;
 
 use anyhow::Result;
 use colored::Colorize;
+
+use super::common::CommandTimer;
 use rusqlite::params;
 
 use crate::db;
+use crate::open_db_or_return;
 
 /// Find potentially unused symbols in a module or project
 pub fn cmd_unused_symbols(
@@ -19,12 +21,9 @@ pub fn cmd_unused_symbols(
     limit: usize,
     format: &str,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     // Build query based on filters
     let (sql, filter_param) = if let Some(mod_path) = module {
@@ -163,6 +162,5 @@ pub fn cmd_unused_symbols(
         println!("  No unused symbols found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }

@@ -17,10 +17,11 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 use anyhow::Result;
 use colored::Colorize;
+
+use super::common::CommandTimer;
 use regex::Regex;
 
 use super::{relative_path, search_files_limited};
@@ -48,7 +49,7 @@ fn grep_and_print(
     label: &str,
     truncate_len: usize,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     let mut items: Vec<(String, usize, String)> = vec![];
 
     search_files_limited(root, pattern, extensions, limit, |path, line_num, line| {
@@ -67,13 +68,12 @@ fn grep_and_print(
         println!("  {}:{}", path.cyan(), line_num);
         println!("    {}", content);
     }
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find TODO/FIXME/HACK comments
 pub fn cmd_todo(root: &Path, pattern: &str, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     let search_pattern = format!(r"//.*({pattern})|#.*({pattern})");
 
     let mut todos: HashMap<String, Vec<(String, usize, String)>> = HashMap::new();
@@ -128,13 +128,12 @@ pub fn cmd_todo(root: &Path, pattern: &str, limit: usize) -> Result<()> {
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find function callers
 pub fn cmd_callers(root: &Path, function_name: &str, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     // Pattern for function calls: obj.func(), ->func(), func(), this.func(), super.func(),
     // await func(), return func(), yield func()
     let pattern = format!(
@@ -184,7 +183,6 @@ pub fn cmd_callers(root: &Path, function_name: &str, limit: usize) -> Result<()>
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -195,7 +193,7 @@ pub fn cmd_call_tree(
     max_depth: usize,
     limit_per_level: usize,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     println!("{}", format!("Call tree for '{}':", function_name).bold());
     println!("  {}", function_name.cyan());
@@ -212,7 +210,6 @@ pub fn cmd_call_tree(
         &mut visited,
     )?;
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -368,7 +365,7 @@ fn find_containing_function(
 
 /// Find Dagger @Provides/@Binds for a type
 pub fn cmd_provides(root: &Path, type_name: &str, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     let mut results: Vec<(String, usize, String)> = vec![];
 
@@ -455,13 +452,12 @@ pub fn cmd_provides(root: &Path, type_name: &str, limit: usize) -> Result<()> {
         println!("    {}", truncated);
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find suspend functions
 pub fn cmd_suspend(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     let pattern = r"suspend\s+fun\s+\w+";
     let func_regex = Regex::new(r"suspend\s+fun\s+(\w+)")?;
 
@@ -491,13 +487,12 @@ pub fn cmd_suspend(root: &Path, query: Option<&str>, limit: usize) -> Result<()>
         println!("  {}: {}:{}", func_name.cyan(), path, line_num);
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find @Composable functions
 pub fn cmd_composables(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     let func_regex = Regex::new(r"fun\s+(\w+)\s*\(")?;
 
     // Phase 1: find all .kt files containing @Composable
@@ -570,7 +565,6 @@ pub fn cmd_composables(root: &Path, query: Option<&str>, limit: usize) -> Result
         println!("  {}: {}:{}", func_name.cyan(), path, line_num);
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -604,7 +598,7 @@ pub fn cmd_suppress(root: &Path, query: Option<&str>, limit: usize) -> Result<()
 
 /// Find @Inject/@Autowired points for a type
 pub fn cmd_inject(root: &Path, type_name: &str, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     let pattern = r"@Inject|@Autowired";
 
     let mut items: Vec<(String, usize, String)> = vec![];
@@ -643,7 +637,6 @@ pub fn cmd_inject(root: &Path, type_name: &str, limit: usize) -> Result<()> {
         println!("    {}", content);
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -687,7 +680,7 @@ pub fn cmd_deeplinks(root: &Path, query: Option<&str>, limit: usize) -> Result<(
 
 /// Find extension functions/types
 pub fn cmd_extensions(root: &Path, receiver_type: &str, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     // Kotlin: fun ReceiverType.functionName
     // Swift: extension ReceiverType
     let kotlin_pattern = format!(r"fun\s+{}\.(\w+)", regex::escape(receiver_type));
@@ -730,13 +723,12 @@ pub fn cmd_extensions(root: &Path, receiver_type: &str, limit: usize) -> Result<
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find Flow declarations
 pub fn cmd_flows(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     let pattern = r"(StateFlow|SharedFlow|MutableStateFlow|MutableSharedFlow|Flow<)";
     let flow_regex =
         Regex::new(r"(StateFlow|SharedFlow|MutableStateFlow|MutableSharedFlow|Flow)<")?;
@@ -766,13 +758,12 @@ pub fn cmd_flows(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
         println!("    {}", content);
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Find @Preview functions
 pub fn cmd_previews(root: &Path, query: Option<&str>, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     let func_regex = Regex::new(r"fun\s+(\w+)\s*\(")?;
 
     // Phase 1: find all .kt files containing @Preview
@@ -845,7 +836,6 @@ pub fn cmd_previews(root: &Path, query: Option<&str>, limit: usize) -> Result<()
         println!("  {}: {}:{}", func_name.cyan(), path, line_num);
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 

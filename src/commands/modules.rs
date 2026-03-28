@@ -8,25 +8,23 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::Instant;
 
 use anyhow::Result;
 use colored::Colorize;
+
+use super::common::CommandTimer;
 use regex::Regex;
 use rusqlite::{Connection, params};
 use walkdir::WalkDir;
 
-use crate::db;
 use crate::indexer;
+use crate::open_db_or_return;
 
 /// Find modules by pattern
 pub fn cmd_module(root: &Path, pattern: &str, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     let mut stmt = conn.prepare("SELECT name, path FROM modules WHERE name LIKE ?1 LIMIT ?2")?;
     let pattern = format!("%{}%", pattern);
@@ -46,18 +44,14 @@ pub fn cmd_module(root: &Path, pattern: &str, limit: usize) -> Result<()> {
         println!("  No modules found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Show module dependencies
 pub fn cmd_deps(root: &Path, module: &str) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     // Check if module deps are indexed
     let dep_count: i64 =
@@ -114,18 +108,14 @@ pub fn cmd_deps(root: &Path, module: &str) -> Result<()> {
         println!("  No dependencies found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Show modules that depend on a module
 pub fn cmd_dependents(root: &Path, module: &str) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     // Check if module deps are indexed
     let dep_count: i64 =
@@ -182,7 +172,6 @@ pub fn cmd_dependents(root: &Path, module: &str) -> Result<()> {
         println!("  No dependents found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -195,12 +184,9 @@ pub fn cmd_unused_deps(
     check_xml: bool,
     check_resources: bool,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     // Check if module deps are indexed
     let dep_count: i64 =
@@ -603,7 +589,6 @@ pub fn cmd_unused_deps(
         println!("  - Exported (api): {}", exported.len());
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 

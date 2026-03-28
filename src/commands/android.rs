@@ -6,22 +6,20 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::Instant;
 
 use anyhow::Result;
 use colored::Colorize;
+
+use super::common::CommandTimer;
 use rusqlite::params;
 
-use crate::db;
+use crate::open_db_or_return;
 
 /// Find XML usages of a class (layouts, views)
 pub fn cmd_xml_usages(root: &Path, class_name: &str, module_filter: Option<&str>) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     // Check if XML usages are indexed
     let xml_count: i64 = conn.query_row("SELECT COUNT(*) FROM xml_usages", [], |row| row.get(0))?;
@@ -107,7 +105,6 @@ pub fn cmd_xml_usages(root: &Path, class_name: &str, module_filter: Option<&str>
         println!("  No XML usages found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -119,12 +116,9 @@ pub fn cmd_resource_usages(
     type_filter: Option<&str>,
     show_unused: bool,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     // Check if resources are indexed
     let res_count: i64 = conn.query_row("SELECT COUNT(*) FROM resources", [], |row| row.get(0))?;
@@ -269,7 +263,6 @@ pub fn cmd_resource_usages(
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 

@@ -5,14 +5,16 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::Instant;
 
 use anyhow::Result;
 use colored::Colorize;
+
+use super::common::CommandTimer;
 use rusqlite::params;
 use serde::Serialize;
 
 use crate::db;
+use crate::open_db_or_return;
 
 // ── map ──────────────────────────────────────────────────────────────
 
@@ -192,12 +194,9 @@ pub fn cmd_map(
     limit: usize,
     format: &str,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
     let stats = db::get_stats(&conn)?;
     let project_type = detect_project_type(&conn);
 
@@ -218,7 +217,6 @@ pub fn cmd_map(
         cmd_map_summary(&conn, &project_type, &stats, limit, depth, format)?;
     }
 
-    eprintln!("{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -713,12 +711,9 @@ const ARCH_PATTERNS: &[(&[&str], &str)] = &[
 ];
 
 pub fn cmd_conventions(root: &Path, format: &str) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     // A. Naming patterns — suffix counts from symbols
     let mut naming: Vec<NamingPattern> = Vec::new();
@@ -857,6 +852,5 @@ pub fn cmd_conventions(root: &Path, format: &str) -> Result<()> {
         println!();
     }
 
-    eprintln!("{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }

@@ -11,8 +11,11 @@ use std::time::Instant;
 use anyhow::Result;
 use colored::Colorize;
 
+use super::common::CommandTimer;
+
 use crate::db;
 use crate::indexer;
+use crate::open_db_or_return;
 
 /// File count threshold for auto-switching to sub-projects mode
 const AUTO_SUB_PROJECTS_THRESHOLD: usize = 65_000;
@@ -83,7 +86,7 @@ pub fn cmd_rebuild(
         }
     }
 
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     // Acquire exclusive lock to prevent concurrent rebuilds
     if verbose {
@@ -451,7 +454,6 @@ pub fn cmd_rebuild(
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -463,7 +465,7 @@ fn cmd_rebuild_sub_projects(
     no_ignore: bool,
     verbose: bool,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     // Acquire exclusive lock to prevent concurrent rebuilds
     if verbose {
@@ -584,18 +586,14 @@ fn cmd_rebuild_sub_projects(
         )
         .green()
     );
-    eprintln!("{}", format!("Total time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Incrementally update the index
 pub fn cmd_update(root: &Path) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let mut conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let mut conn = open_db_or_return!(root);
 
     println!("{}", "Checking for changes...".cyan());
     let (updated, changed, deleted) = indexer::update_directory_incremental(&mut conn, root, true)?;
@@ -615,7 +613,6 @@ pub fn cmd_update(root: &Path) -> Result<()> {
         );
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -683,10 +680,7 @@ pub fn cmd_clear(root: &Path) -> Result<()> {
 
 /// Show index statistics
 pub fn cmd_stats(root: &Path, format: &str) -> Result<()> {
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
     let stats = db::get_stats(&conn)?;
     let db_path = db::get_db_path(root)?;
     let db_size = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0);
@@ -741,10 +735,7 @@ pub fn cmd_stats(root: &Path, format: &str) -> Result<()> {
 
 /// Add an extra source root
 pub fn cmd_add_root(root: &Path, path: &str, force: bool) -> Result<()> {
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     let abs_path = if std::path::Path::new(path).is_absolute() {
         path.to_string()
@@ -790,10 +781,7 @@ pub fn cmd_add_root(root: &Path, path: &str, force: bool) -> Result<()> {
 
 /// Remove an extra source root
 pub fn cmd_remove_root(root: &Path, path: &str) -> Result<()> {
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     let abs_path = if std::path::Path::new(path).is_absolute() {
         path.to_string()
@@ -812,10 +800,7 @@ pub fn cmd_remove_root(root: &Path, path: &str) -> Result<()> {
 
 /// List configured source roots
 pub fn cmd_list_roots(root: &Path) -> Result<()> {
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
     let extra_roots = db::get_extra_roots(&conn)?;
 
     println!("{}", "Source roots:".bold());

@@ -8,10 +8,11 @@
 //! - perl_imports: Find use/require statements
 
 use std::path::Path;
-use std::time::Instant;
 
 use anyhow::Result;
 use colored::Colorize;
+
+use super::common::CommandTimer;
 
 use super::{relative_path, search_files_limited};
 
@@ -34,7 +35,7 @@ fn grep_and_print(
     truncate_len: usize,
     extra_filter: impl Fn(&str) -> bool,
 ) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
     let mut results: Vec<(String, usize, String)> = vec![];
 
     search_files_limited(root, pattern, extensions, limit, |path, line_num, line| {
@@ -56,7 +57,6 @@ fn grep_and_print(
         println!("  {}:{}", path.cyan(), line_num);
         println!("    {}", content);
     }
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 

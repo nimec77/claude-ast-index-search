@@ -8,16 +8,17 @@
 //! - changed: Show changed symbols in git diff
 
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 use anyhow::Result;
 use colored::Colorize;
-use regex::Regex;
 
-use crate::db::SymbolKind;
+use super::common::CommandTimer;
+use regex::Regex;
 
 use super::{relative_path, search_files};
 use crate::db;
+use crate::db::SymbolKind;
+use crate::open_db_or_return;
 
 /// Outline helper: parse file with tree-sitter and print symbols, skipping specified kinds.
 /// Returns true if any symbols were printed.
@@ -45,12 +46,9 @@ fn outline_via_treesitter(
 
 /// Find files by pattern
 pub fn cmd_file(root: &Path, pattern: &str, _exact: bool, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
-    let conn = match db::open_db_or_warn(root)? {
-        Some(c) => c,
-        None => return Ok(()),
-    };
+    let conn = open_db_or_return!(root);
 
     let search_pattern = pattern.to_string();
     let files = db::find_files(&conn, &search_pattern, limit)?;
@@ -65,13 +63,12 @@ pub fn cmd_file(root: &Path, pattern: &str, _exact: bool, limit: usize) -> Resul
         println!("  No files found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Show file symbols outline
 pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     // Find the file
     let file_path = if file.starts_with('/') {
@@ -388,13 +385,12 @@ pub fn cmd_outline(root: &Path, file: &str) -> Result<()> {
         println!("  No symbols found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Show file imports
 pub fn cmd_imports(root: &Path, file: &str) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     let file_path = if file.starts_with('/') {
         PathBuf::from(file)
@@ -505,13 +501,12 @@ pub fn cmd_imports(root: &Path, file: &str) -> Result<()> {
         println!("\n  Total: {} imports", imports.len());
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
 /// Show module public API
 pub fn cmd_api(root: &Path, module_path: &str, limit: usize) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     let mut module_dir = root.join(module_path);
 
@@ -587,7 +582,6 @@ pub fn cmd_api(root: &Path, module_path: &str, limit: usize) -> Result<()> {
         println!("  No public API found.");
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
 
@@ -679,7 +673,7 @@ fn normalize_base_for_vcs(vcs: &str, base: &str) -> String {
 
 /// Show changed symbols in git/arc diff
 pub fn cmd_changed(root: &Path, base: &str) -> Result<()> {
-    let start = Instant::now();
+    let _timer = CommandTimer::new();
 
     let vcs = detect_vcs(root);
     let base = normalize_base_for_vcs(vcs, base);
@@ -771,6 +765,5 @@ pub fn cmd_changed(root: &Path, base: &str) -> Result<()> {
         }
     }
 
-    eprintln!("\n{}", format!("Time: {:?}", start.elapsed()).dimmed());
     Ok(())
 }
