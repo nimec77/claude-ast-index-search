@@ -4,6 +4,39 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 use serde::Serialize;
 
+/// Symbol kinds that represent class-like declarations.
+const CLASS_LIKE_KINDS: &[&str] = &[
+    "class", "interface", "object", "enum", "protocol", "struct", "actor", "package",
+];
+
+/// Build a SQL `IN (...)` clause for class-like kinds.
+fn class_like_in_clause() -> String {
+    let items: Vec<String> = CLASS_LIKE_KINDS.iter().map(|k| format!("'{}'", k)).collect();
+    format!("({})", items.join(", "))
+}
+
+/// Collect boxed query params from: initial string values, scope params, and a trailing limit.
+fn collect_query_params(
+    initial: &[&str],
+    scope_params: &[String],
+    limit: usize,
+) -> Vec<Box<dyn rusqlite::types::ToSql>> {
+    let mut all: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    for p in initial {
+        all.push(Box::new(p.to_string()));
+    }
+    for p in scope_params {
+        all.push(Box::new(p.clone()));
+    }
+    all.push(Box::new(limit as i64));
+    all
+}
+
+/// Convert `Vec<Box<dyn ToSql>>` into reference slice for rusqlite.
+fn params_as_refs(params: &[Box<dyn rusqlite::types::ToSql>]) -> Vec<&dyn rusqlite::types::ToSql> {
+    params.iter().map(|p| p.as_ref()).collect()
+}
+
 /// Escape FTS5 special characters
 #[cfg_attr(test, allow(dead_code))]
 pub(super) fn escape_fts5_query(query: &str) -> String {
@@ -119,37 +152,33 @@ pub fn find_implementations(
 
 /// Get database statistics
 pub fn get_stats(conn: &Connection) -> Result<DbStats> {
-    let file_count: i64 = conn.query_row("SELECT COUNT(*) FROM files", [], |row| row.get(0))?;
-    let symbol_count: i64 = conn.query_row("SELECT COUNT(*) FROM symbols", [], |row| row.get(0))?;
-    let module_count: i64 = conn.query_row("SELECT COUNT(*) FROM modules", [], |row| row.get(0))?;
-    let refs_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM refs", [], |row| row.get(0))
-        .unwrap_or(0);
-    let xml_usages_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM xml_usages", [], |row| row.get(0))
-        .unwrap_or(0);
-    let resources_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM resources", [], |row| row.get(0))
-        .unwrap_or(0);
-    let storyboard_usages_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM storyboard_usages", [], |row| {
-            row.get(0)
-        })
-        .unwrap_or(0);
-    let ios_assets_count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM ios_assets", [], |row| row.get(0))
-        .unwrap_or(0);
-
-    Ok(DbStats {
-        file_count,
-        symbol_count,
-        module_count,
-        refs_count,
-        xml_usages_count,
-        resources_count,
-        storyboard_usages_count,
-        ios_assets_count,
-    })
+    conn.query_row(
+        r#"
+        SELECT
+            (SELECT COUNT(*) FROM files),
+            (SELECT COUNT(*) FROM symbols),
+            (SELECT COUNT(*) FROM modules),
+            COALESCE((SELECT COUNT(*) FROM refs), 0),
+            COALESCE((SELECT COUNT(*) FROM xml_usages), 0),
+            COALESCE((SELECT COUNT(*) FROM resources), 0),
+            COALESCE((SELECT COUNT(*) FROM storyboard_usages), 0),
+            COALESCE((SELECT COUNT(*) FROM ios_assets), 0)
+        "#,
+        [],
+        |row| {
+            Ok(DbStats {
+                file_count: row.get(0)?,
+                symbol_count: row.get(1)?,
+                module_count: row.get(2)?,
+                refs_count: row.get(3)?,
+                xml_usages_count: row.get(4)?,
+                resources_count: row.get(5)?,
+                storyboard_usages_count: row.get(6)?,
+                ios_assets_count: row.get(7)?,
+            })
+        },
+    )
+    .map_err(Into::into)
 }
 
 #[derive(Debug, Serialize)]
@@ -370,15 +399,8 @@ pub fn search_symbols_scoped(
     );
 
     let mut stmt = conn.prepare(&sql)?;
-    let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-    all_params.push(Box::new(escaped_query));
-    for p in &scope_params {
-        all_params.push(Box::new(p.clone()));
-    }
-    all_params.push(Box::new(limit as i64));
-
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-        all_params.iter().map(|p| p.as_ref()).collect();
+    let all_params = collect_query_params(&[&escaped_query], &scope_params, limit);
+    let param_refs = params_as_refs(&all_params);
     let results = stmt
         .query_map(param_refs.as_slice(), SearchResult::from_row)?
         .collect::<Result<Vec<_>, _>>()?;
@@ -474,12 +496,13 @@ pub fn find_class_like_scoped(
 ) -> Result<Vec<SearchResult>> {
     let (scope_clause, scope_params) = scope.path_condition();
 
+    let kinds = class_like_in_clause();
     let sql = format!(
         r#"
         SELECT s.name, s.kind, s.line, s.signature, f.path
         FROM symbols s
         JOIN files f ON s.file_id = f.id
-        WHERE s.name = ?1 AND s.kind IN ('class', 'interface', 'object', 'enum', 'protocol', 'struct', 'actor', 'package'){}
+        WHERE s.name = ?1 AND s.kind IN {kinds}{}
         LIMIT ?{}
         "#,
         scope_clause,
@@ -487,15 +510,8 @@ pub fn find_class_like_scoped(
     );
 
     let mut stmt = conn.prepare(&sql)?;
-    let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-    all_params.push(Box::new(name.to_string()));
-    for p in &scope_params {
-        all_params.push(Box::new(p.clone()));
-    }
-    all_params.push(Box::new(limit as i64));
-
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-        all_params.iter().map(|p| p.as_ref()).collect();
+    let all_params = collect_query_params(&[name], &scope_params, limit);
+    let param_refs = params_as_refs(&all_params);
     let results = stmt
         .query_map(param_refs.as_slice(), SearchResult::from_row)?
         .collect::<Result<Vec<_>, _>>()?;
@@ -552,16 +568,18 @@ pub fn find_class_like_pattern(
     limit: usize,
 ) -> Result<Vec<SearchResult>> {
     let like_pattern = glob_to_like(pattern);
-    let mut stmt = conn.prepare(
+    let kinds = class_like_in_clause();
+    let sql = format!(
         r#"
         SELECT s.name, s.kind, s.line, s.signature, f.path
         FROM symbols s
         JOIN files f ON s.file_id = f.id
-        WHERE s.name LIKE ?1 AND s.kind IN ('class', 'interface', 'object', 'enum', 'protocol', 'struct', 'actor', 'package')
+        WHERE s.name LIKE ?1 AND s.kind IN {kinds}
         ORDER BY length(s.name)
         LIMIT ?2
         "#,
-    )?;
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let results = stmt
         .query_map(params![like_pattern, limit as i64], SearchResult::from_row)?
         .collect::<Result<Vec<_>, _>>()?;
@@ -591,15 +609,8 @@ pub fn find_references_scoped(
     );
 
     let mut stmt = conn.prepare(&sql)?;
-    let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-    all_params.push(Box::new(name.to_string()));
-    for p in &scope_params {
-        all_params.push(Box::new(p.clone()));
-    }
-    all_params.push(Box::new(limit as i64));
-
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-        all_params.iter().map(|p| p.as_ref()).collect();
+    let all_params = collect_query_params(&[name], &scope_params, limit);
+    let param_refs = params_as_refs(&all_params);
     let results = stmt
         .query_map(param_refs.as_slice(), RefResult::from_row)?
         .collect::<Result<Vec<_>, _>>()?;
