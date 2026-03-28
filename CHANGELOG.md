@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.27.3] - 2026-03-28
+
 ### Added
 - Ruby bang/question method reference detection (`save!`, `valid?`, `destroy!`) via custom `extract_refs` override
 - Ruby DSL support for Alba serializer (`attribute`) and Dry::Initializer (`option`, `param`)
