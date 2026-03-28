@@ -46,17 +46,7 @@ pub fn cmd_watch(root: &Path) -> Result<()> {
                         // Skip excluded directories
                         !path.components().any(|c| {
                             let s = c.as_os_str().to_str().unwrap_or("");
-                            matches!(
-                                s,
-                                "build"
-                                    | "node_modules"
-                                    | ".gradle"
-                                    | ".git"
-                                    | "target"
-                                    | ".idea"
-                                    | "__pycache__"
-                                    | ".dart_tool"
-                            )
+                            indexer::EXCLUDED_DIRS.contains(&s)
                         })
                     })
                     .collect();
