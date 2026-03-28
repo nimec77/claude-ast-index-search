@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- Ruby bang/question method reference detection (`save!`, `valid?`, `destroy!`) via custom `extract_refs` override
+- Ruby DSL support for Alba serializer (`attribute`) and Dry::Initializer (`option`, `param`)
+- Vue Composition API outline: `ref()`, `computed()`, `reactive()`, `shallowRef()`, `shallowReactive()`, `toRef()`, `toRefs()` detected as properties
+- Vue/Pinia macro detection: `defineProps`, `defineEmits`, `defineStore`, `defineExpose`, `defineSlots`
+
 ## [3.27.2] - 2026-03-28
 
 ### Fixed

@@ -1,12 +1,14 @@
 //! Tree-sitter based Ruby parser
 
 use anyhow::Result;
+use regex::Regex;
+use std::collections::HashSet;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
 use super::{LanguageParser, find_capture, line_text, node_line, node_text, parse_tree};
 use crate::db::SymbolKind;
-use crate::parsers::ParsedSymbol;
+use crate::parsers::{ParsedRef, ParsedSymbol};
 
 static RUBY_LANGUAGE: LazyLock<Language> = LazyLock::new(|| tree_sitter_ruby::LANGUAGE.into());
 
@@ -248,6 +250,34 @@ impl LanguageParser for RubyParser {
                         }
                     }
 
+                    // Alba serializer: attribute :name
+                    "attribute" if !has_receiver => {
+                        if let Some(arg) = first_arg {
+                            let sym_name = normalize_symbol(arg);
+                            symbols.push(ParsedSymbol {
+                                name: format!("attribute :{}", sym_name),
+                                kind: SymbolKind::Property,
+                                line,
+                                signature: line_text(content, line).trim().to_string(),
+                                parents: vec![],
+                            });
+                        }
+                    }
+
+                    // Dry::Initializer: option :name, param :name
+                    "option" | "param" if !has_receiver => {
+                        if let Some(arg) = first_arg {
+                            let sym_name = normalize_symbol(arg);
+                            symbols.push(ParsedSymbol {
+                                name: format!("{} :{}", method, sym_name),
+                                kind: SymbolKind::Property,
+                                line,
+                                signature: line_text(content, line).trim().to_string(),
+                                parents: vec![],
+                            });
+                        }
+                    }
+
                     // RSpec describe / context
                     "describe" | "context" if !has_receiver => {
                         if let Some(arg) = first_arg {
@@ -297,6 +327,38 @@ impl LanguageParser for RubyParser {
         }
 
         Ok(symbols)
+    }
+
+    /// Override to detect Ruby bang/question method references (save!, valid?)
+    fn extract_refs(&self, content: &str, defined: &[ParsedSymbol]) -> Result<Vec<ParsedRef>> {
+        // Start with the generic reference extraction
+        let mut refs = crate::parsers::extract_references(content, defined)?;
+
+        // Add Ruby-specific: method calls ending with ! or ?
+        // Matches: .save!, obj.valid?, save!(args), valid?(x)
+        static BANG_Q_RE: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"\b([a-z_][a-zA-Z0-9_]*[!?])").unwrap());
+
+        let defined_names: HashSet<&str> = defined.iter().map(|s| s.name.as_str()).collect();
+
+        for (line_num, line) in content.lines().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('#') || trimmed.len() > 2000 {
+                continue;
+            }
+            for caps in BANG_Q_RE.captures_iter(line) {
+                let name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+                if !name.is_empty() && !defined_names.contains(name) {
+                    refs.push(ParsedRef {
+                        name: name.to_string(),
+                        line: line_num + 1,
+                        context: trimmed.chars().take(500).collect(),
+                    });
+                }
+            }
+        }
+
+        Ok(refs)
     }
 }
 
@@ -838,5 +900,64 @@ end
                 .iter()
                 .any(|s| s.kind == SymbolKind::Class && s.name == "VERSION")
         );
+    }
+
+    #[test]
+    fn test_parse_alba_attribute() {
+        let content = r#"class UserSerializer
+  include Alba::Resource
+  attribute :name
+  attribute :email
+end
+"#;
+        let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "attribute :name" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "attribute :email" && s.kind == SymbolKind::Property)
+        );
+    }
+
+    #[test]
+    fn test_parse_dry_initializer() {
+        let content = r#"class CreateUser
+  extend Dry::Initializer
+  option :name
+  option :email, optional: true
+  param :role
+end
+"#;
+        let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "option :name" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "option :email" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "param :role" && s.kind == SymbolKind::Property)
+        );
+    }
+
+    #[test]
+    fn test_extract_refs_bang_question_methods() {
+        let content =
+            "class Foo\n  def run\n    record.save!\n    obj.valid?\n    destroy!\n  end\nend\n";
+        let symbols = RUBY_PARSER.parse_symbols(content).unwrap();
+        let refs = RUBY_PARSER.extract_refs(content, &symbols).unwrap();
+        assert!(refs.iter().any(|r| r.name == "save!"));
+        assert!(refs.iter().any(|r| r.name == "valid?"));
+        assert!(refs.iter().any(|r| r.name == "destroy!"));
     }
 }

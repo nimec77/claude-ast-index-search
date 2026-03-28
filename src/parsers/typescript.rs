@@ -143,6 +143,24 @@ pub fn parse_typescript_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
     });
     let vue_component_re = &*VUE_COMPONENT_RE;
 
+    // Vue Composition API: const x = ref(...), const x = computed(...), const x = reactive(...)
+    static VUE_COMPOSITION_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?m)^[ \t]*(?:const|let)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:ref|computed|reactive|shallowRef|shallowReactive|toRef|toRefs)\s*[<(]",
+        )
+        .unwrap()
+    });
+    let vue_composition_re = &*VUE_COMPOSITION_RE;
+
+    // Vue/Pinia macros: defineProps, defineEmits, defineStore, defineExpose
+    static VUE_MACRO_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?m)^[ \t]*(?:(?:const|let)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*)?(defineProps|defineEmits|defineStore|defineExpose|defineSlots)\s*[<(]",
+        )
+        .unwrap()
+    });
+    let vue_macro_re = &*VUE_MACRO_RE;
+
     // Svelte: export let propName (props)
     static SVELTE_PROP_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?m)^[ \t]*export\s+let\s+([a-zA-Z_][a-zA-Z0-9_]*)").unwrap()
@@ -533,6 +551,44 @@ pub fn parse_typescript_symbols(content: &str) -> Result<Vec<ParsedSymbol>> {
         });
     }
 
+    // Parse Vue Composition API reactive state (ref, computed, reactive)
+    for cap in vue_composition_re.captures_iter(content) {
+        let name = cap.get(1).unwrap().as_str();
+        let start = cap.get(0).unwrap().start();
+        let line = find_line_number(content, start);
+        let line_text = lines.get(line - 1).unwrap_or(&"");
+
+        symbols.push(ParsedSymbol {
+            name: name.to_string(),
+            kind: SymbolKind::Property,
+            line,
+            signature: line_text.trim().to_string(),
+            parents: vec![],
+        });
+    }
+
+    // Parse Vue/Pinia macros (defineProps, defineEmits, defineStore, defineExpose)
+    for cap in vue_macro_re.captures_iter(content) {
+        let macro_name = cap.get(2).unwrap().as_str();
+        let start = cap.get(0).unwrap().start();
+        let line = find_line_number(content, start);
+        let line_text = lines.get(line - 1).unwrap_or(&"");
+
+        // Use the assigned variable name if present, otherwise the macro name
+        let name = cap
+            .get(1)
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_else(|| macro_name.to_string());
+
+        symbols.push(ParsedSymbol {
+            name,
+            kind: SymbolKind::Function,
+            line,
+            signature: line_text.trim().to_string(),
+            parents: vec![],
+        });
+    }
+
     // Parse Svelte props (export let)
     for cap in svelte_prop_re.captures_iter(content) {
         let name = cap.get(1).unwrap().as_str();
@@ -848,6 +904,89 @@ const INTERNAL_TIMEOUT = 5000;
             symbols
                 .iter()
                 .any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Constant)
+        );
+    }
+
+    #[test]
+    fn test_parse_vue_composition_api() {
+        let content = r#"
+const count = ref(0)
+const doubled = computed(() => count.value * 2)
+const state = reactive({ name: 'test', items: [] })
+const inputRef = shallowRef(null)
+"#;
+        let symbols = parse_typescript_symbols(content).unwrap();
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "count" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "doubled" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "state" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "inputRef" && s.kind == SymbolKind::Property)
+        );
+    }
+
+    #[test]
+    fn test_parse_vue_macros() {
+        let content = r#"
+const props = defineProps<{ title: string }>()
+const emit = defineEmits(['update', 'delete'])
+defineExpose({ reset })
+"#;
+        let symbols = parse_typescript_symbols(content).unwrap();
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "props" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "emit" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "defineExpose" && s.kind == SymbolKind::Function)
+        );
+    }
+
+    #[test]
+    fn test_parse_pinia_define_store() {
+        let content = r#"
+const useUserStore = defineStore('user', () => {
+  const name = ref('')
+  const age = ref(0)
+  return { name, age }
+})
+"#;
+        let symbols = parse_typescript_symbols(content).unwrap();
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "useUserStore" && s.kind == SymbolKind::Function)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "name" && s.kind == SymbolKind::Property)
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "age" && s.kind == SymbolKind::Property)
         );
     }
 
