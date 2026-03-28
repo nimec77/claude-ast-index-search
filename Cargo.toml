@@ -16,7 +16,7 @@ grep-searcher = "0.1"
 grep-regex = "0.1"
 
 # SQLite + FTS5
-rusqlite = { version = "0.38.0", features = ["bundled-full"] }
+rusqlite = { version = "0.39.0", features = ["bundled-full"] }
 
 # Utilities
 walkdir = "2"
@@ -43,10 +43,10 @@ tree-sitter-swift = "0.7"
 tree-sitter-ruby = "0.23"
 tree-sitter-c-sharp = "0.23"
 tree-sitter-cpp = "0.23"
-tree-sitter-dart = "0.0.4"
+tree-sitter-dart-orchard = "0.3.2"
 tree-sitter-objc = "3.0"
 tree-sitter-proto = "0.4"
-tree-sitter-scala = "0.24"
+tree-sitter-scala = "0.25.0"
 tree-sitter-php = "0.24"
 fs2 = "0.4.3"
 

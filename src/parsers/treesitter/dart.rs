@@ -11,7 +11,8 @@ use crate::parsers::ParsedSymbol;
 #[path = "dart_error_recovery.rs"]
 mod error_recovery;
 
-static DART_LANGUAGE: LazyLock<Language> = LazyLock::new(tree_sitter_dart::language);
+static DART_LANGUAGE: LazyLock<Language> =
+    LazyLock::new(|| tree_sitter_dart_orchard::LANGUAGE.into());
 
 pub static DART_PARSER: DartParser = DartParser;
 
