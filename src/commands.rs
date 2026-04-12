@@ -39,6 +39,9 @@ use crate::db;
 
 /// Check if no_ignore mode is enabled for this project
 pub fn is_no_ignore_enabled(root: &Path) -> bool {
+    if !db::db_exists(root) {
+        return false;
+    }
     if let Ok(conn) = db::open_db(root) {
         let result: Result<String, _> = conn.query_row(
             "SELECT value FROM metadata WHERE key = 'no_ignore'",

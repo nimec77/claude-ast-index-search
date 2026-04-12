@@ -521,6 +521,7 @@ pub fn cmd_api(root: &Path, module_path: &str, limit: usize) -> Result<()> {
 
     // Also try looking up module path from DB
     if !module_dir.exists()
+        && crate::db::db_exists(root)
         && let Ok(conn) = crate::db::open_db(root)
     {
         let db_path: Option<String> = conn

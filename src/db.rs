@@ -92,7 +92,6 @@ pub fn get_db_path(project_root: &Path) -> Result<PathBuf> {
         }
     }
 
-    std::fs::create_dir_all(&db_dir)?;
     Ok(db_dir.join("index.db"))
 }
 
@@ -822,6 +821,37 @@ mod tests {
         assert!(
             result.unwrap().is_none(),
             "open_db_or_warn should return None when index does not exist"
+        );
+    }
+
+    #[test]
+    fn test_get_db_path_does_not_create_directory() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let fake_project = tmp.path().join("no_mkdir_test_project");
+        std::fs::create_dir(&fake_project).unwrap();
+
+        let db_path = get_db_path(&fake_project).unwrap();
+        let db_dir = db_path.parent().unwrap();
+
+        assert!(
+            !db_dir.exists(),
+            "get_db_path must not create the cache directory as a side effect"
+        );
+    }
+
+    #[test]
+    fn test_db_exists_does_not_create_directory() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let fake_project = tmp.path().join("no_mkdir_exists_test");
+        std::fs::create_dir(&fake_project).unwrap();
+
+        let db_path = get_db_path(&fake_project).unwrap();
+        let db_dir = db_path.parent().unwrap();
+
+        assert!(!db_exists(&fake_project));
+        assert!(
+            !db_dir.exists(),
+            "db_exists must not create the cache directory as a side effect"
         );
     }
 }
