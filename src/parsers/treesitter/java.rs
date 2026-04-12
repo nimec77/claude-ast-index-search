@@ -22,6 +22,16 @@ pub static JAVA_PARSER: JavaParser = JavaParser;
 
 pub struct JavaParser;
 
+/// Parent extraction specs: (tree-sitter child node kind, inheritance keyword).
+/// "superclass" uses single-type extraction; all others use type-list extraction.
+const CLASS_PARENT_SPECS: &[(&str, &str)] = &[
+    ("superclass", "extends"),
+    ("super_interfaces", "implements"),
+];
+const INTERFACE_PARENT_SPECS: &[(&str, &str)] = &[("extends_interfaces", "extends")];
+const ENUM_PARENT_SPECS: &[(&str, &str)] = &[("super_interfaces", "implements")];
+const RECORD_PARENT_SPECS: &[(&str, &str)] = &[("super_interfaces", "implements")];
+
 /// Significant Java/Spring annotations to track
 const SIGNIFICANT_ANNOTATIONS: &[&str] = &[
     "RestController",
@@ -107,7 +117,7 @@ impl LanguageParser for JavaParser {
                 let line = node_line(&name_cap.node);
                 if emitted.insert((name.to_string(), line)) {
                     let parents = find_capture(m, idx_class_node)
-                        .map(|n| extract_class_parents(content, &n.node))
+                        .map(|n| extract_parents(content, &n.node, CLASS_PARENT_SPECS))
                         .unwrap_or_default();
                     symbols.push(ParsedSymbol {
                         name: name.to_string(),
@@ -126,7 +136,7 @@ impl LanguageParser for JavaParser {
                 let line = node_line(&name_cap.node);
                 if emitted.insert((name.to_string(), line)) {
                     let parents = find_capture(m, idx_interface_node)
-                        .map(|n| extract_interface_parents(content, &n.node))
+                        .map(|n| extract_parents(content, &n.node, INTERFACE_PARENT_SPECS))
                         .unwrap_or_default();
                     symbols.push(ParsedSymbol {
                         name: name.to_string(),
@@ -145,7 +155,7 @@ impl LanguageParser for JavaParser {
                 let line = node_line(&name_cap.node);
                 if emitted.insert((name.to_string(), line)) {
                     let parents = find_capture(m, idx_enum_node)
-                        .map(|n| extract_enum_parents(content, &n.node))
+                        .map(|n| extract_parents(content, &n.node, ENUM_PARENT_SPECS))
                         .unwrap_or_default();
                     symbols.push(ParsedSymbol {
                         name: name.to_string(),
@@ -166,7 +176,7 @@ impl LanguageParser for JavaParser {
                     let record_node = find_capture(m, idx_record_node).map(|n| n.node);
                     let parents = record_node
                         .as_ref()
-                        .map(|n| extract_record_parents(content, n))
+                        .map(|n| extract_parents(content, n, RECORD_PARENT_SPECS))
                         .unwrap_or_default();
                     symbols.push(ParsedSymbol {
                         name: name.to_string(),
@@ -334,72 +344,29 @@ fn is_inside_type_body(node: &tree_sitter::Node) -> bool {
         .unwrap_or(false)
 }
 
-/// Extract parent types from a class_declaration (extends + implements)
-fn extract_class_parents(content: &str, class_node: &tree_sitter::Node) -> Vec<(String, String)> {
-    let mut parents = Vec::new();
-    let mut cursor = class_node.walk();
-
-    for child in class_node.children(&mut cursor) {
-        match child.kind() {
-            "superclass" => {
-                // superclass -> "extends" type_identifier/generic_type
-                if let Some(name) = extract_type_from_parent_node(&child, content) {
-                    parents.push((name, "extends".to_string()));
-                }
-            }
-            "super_interfaces" => {
-                // super_interfaces -> "implements" type_list -> type_identifier+
-                extract_type_list(&child, content, "implements", &mut parents);
-            }
-            _ => {}
-        }
-    }
-
-    parents
-}
-
-/// Extract parent types from an interface_declaration (extends)
-fn extract_interface_parents(
+/// Extract parent types from a declaration node using spec-driven rules.
+/// Each spec is `(child_node_kind, inherit_kind)`. The "superclass" child kind
+/// uses single-type extraction; all others use type-list extraction.
+fn extract_parents(
     content: &str,
-    iface_node: &tree_sitter::Node,
+    node: &tree_sitter::Node,
+    specs: &[(&str, &str)],
 ) -> Vec<(String, String)> {
     let mut parents = Vec::new();
-    let mut cursor = iface_node.walk();
-
-    for child in iface_node.children(&mut cursor) {
-        if child.kind() == "extends_interfaces" {
-            extract_type_list(&child, content, "extends", &mut parents);
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        for &(child_kind, inherit_kind) in specs {
+            if child.kind() == child_kind {
+                if child_kind == "superclass" {
+                    if let Some(name) = extract_type_from_parent_node(&child, content) {
+                        parents.push((name, inherit_kind.to_string()));
+                    }
+                } else {
+                    extract_type_list(&child, content, inherit_kind, &mut parents);
+                }
+            }
         }
     }
-
-    parents
-}
-
-/// Extract parent types from an enum_declaration (implements)
-fn extract_enum_parents(content: &str, enum_node: &tree_sitter::Node) -> Vec<(String, String)> {
-    let mut parents = Vec::new();
-    let mut cursor = enum_node.walk();
-
-    for child in enum_node.children(&mut cursor) {
-        if child.kind() == "super_interfaces" {
-            extract_type_list(&child, content, "implements", &mut parents);
-        }
-    }
-
-    parents
-}
-
-/// Extract parent types from a record_declaration (implements only — records can't extend)
-fn extract_record_parents(content: &str, record_node: &tree_sitter::Node) -> Vec<(String, String)> {
-    let mut parents = Vec::new();
-    let mut cursor = record_node.walk();
-
-    for child in record_node.children(&mut cursor) {
-        if child.kind() == "super_interfaces" {
-            extract_type_list(&child, content, "implements", &mut parents);
-        }
-    }
-
     parents
 }
 
@@ -516,346 +483,5 @@ fn extract_type_list(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_class() {
-        let content = "public class UserService {\n}\n";
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "UserService" && s.kind == SymbolKind::Class)
-        );
-    }
-
-    #[test]
-    fn test_parse_class_with_extends() {
-        let content =
-            "public class UserController extends BaseController implements Serializable {\n}\n";
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "UserController").unwrap();
-        assert!(
-            cls.parents
-                .iter()
-                .any(|(p, k)| p == "BaseController" && k == "extends")
-        );
-        assert!(
-            cls.parents
-                .iter()
-                .any(|(p, k)| p == "Serializable" && k == "implements")
-        );
-    }
-
-    #[test]
-    fn test_parse_interface() {
-        let content = "public interface UserRepository extends JpaRepository {\n    User findByName(String name);\n}\n";
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        let iface = symbols.iter().find(|s| s.name == "UserRepository").unwrap();
-        assert_eq!(iface.kind, SymbolKind::Interface);
-        assert!(
-            iface
-                .parents
-                .iter()
-                .any(|(p, k)| p == "JpaRepository" && k == "extends")
-        );
-    }
-
-    #[test]
-    fn test_parse_enum() {
-        let content = "public enum Status {\n    ACTIVE,\n    INACTIVE;\n}\n";
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "Status" && s.kind == SymbolKind::Enum)
-        );
-    }
-
-    #[test]
-    fn test_parse_methods() {
-        let content = r#"public class UserService {
-    public List<User> getUsers() { return null; }
-    private void validate(User user) {}
-    protected String format(String input) { return input; }
-}
-"#;
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "getUsers" && s.kind == SymbolKind::Function)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "validate" && s.kind == SymbolKind::Function)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "format" && s.kind == SymbolKind::Function)
-        );
-    }
-
-    #[test]
-    fn test_parse_constructor() {
-        let content = r#"public class User {
-    private String name;
-    public User(String name) {
-        this.name = name;
-    }
-}
-"#;
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "User" && s.kind == SymbolKind::Class)
-        );
-        // Constructor is indexed as a function with the class name
-        assert!(symbols.iter().filter(|s| s.name == "User").count() >= 2);
-    }
-
-    #[test]
-    fn test_parse_fields() {
-        let content = r#"public class Config {
-    private String apiUrl;
-    public static final int MAX_RETRIES = 3;
-    protected List<String> items;
-}
-"#;
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "apiUrl" && s.kind == SymbolKind::Property)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "MAX_RETRIES" && s.kind == SymbolKind::Property)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "items" && s.kind == SymbolKind::Property)
-        );
-    }
-
-    #[test]
-    fn test_parse_annotations() {
-        let content = r#"@RestController
-@RequestMapping("/api")
-public class UserController {
-    @GetMapping("/users")
-    public List<User> getUsers() { return null; }
-
-    @Override
-    public String toString() { return ""; }
-}
-"#;
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "@RestController" && s.kind == SymbolKind::Annotation)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "@RequestMapping" && s.kind == SymbolKind::Annotation)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "@GetMapping" && s.kind == SymbolKind::Annotation)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "@Override" && s.kind == SymbolKind::Annotation)
-        );
-    }
-
-    #[test]
-    fn test_spring_service() {
-        let content = r#"@Service
-public class PaymentService {
-    @Autowired
-    private PaymentRepository repository;
-
-    @Transactional
-    public Payment processPayment(PaymentRequest request) {
-        return repository.save(request.toPayment());
-    }
-}
-"#;
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "@Service" && s.kind == SymbolKind::Annotation)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "@Autowired" && s.kind == SymbolKind::Annotation)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "@Transactional" && s.kind == SymbolKind::Annotation)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "PaymentService" && s.kind == SymbolKind::Class)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "processPayment" && s.kind == SymbolKind::Function)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "repository" && s.kind == SymbolKind::Property)
-        );
-    }
-
-    #[test]
-    fn test_comments_ignored() {
-        let content =
-            "// class FakeClass {}\npublic class RealClass {}\n/* void fakeMethod() {} */\n";
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "RealClass"));
-        assert!(!symbols.iter().any(|s| s.name == "FakeClass"));
-        assert!(!symbols.iter().any(|s| s.name == "fakeMethod"));
-    }
-
-    #[test]
-    fn test_nonsignificant_annotations_skipped() {
-        let content = r#"@SuppressWarnings("unchecked")
-public class Foo {
-    @Deprecated
-    public void bar() {}
-}
-"#;
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        // SuppressWarnings and Deprecated are not in SIGNIFICANT_ANNOTATIONS
-        assert!(!symbols.iter().any(|s| s.name == "@SuppressWarnings"));
-        assert!(!symbols.iter().any(|s| s.name == "@Deprecated"));
-        // But class and method should still be indexed
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "Foo" && s.kind == SymbolKind::Class)
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "bar" && s.kind == SymbolKind::Function)
-        );
-    }
-
-    #[test]
-    fn test_parse_record() {
-        let content = "public record Point(int x, int y) {}\n";
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        // Record emits as Class
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "Point" && s.kind == SymbolKind::Class),
-            "Record should be indexed as Class"
-        );
-        // Components emitted as Property
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "x" && s.kind == SymbolKind::Property),
-            "Record component x should be Property"
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "y" && s.kind == SymbolKind::Property),
-            "Record component y should be Property"
-        );
-        // Synthetic accessors emitted as Function
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "x()" && s.kind == SymbolKind::Function),
-            "Synthetic accessor x() should be Function"
-        );
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "y()" && s.kind == SymbolKind::Function),
-            "Synthetic accessor y() should be Function"
-        );
-    }
-
-    #[test]
-    fn test_parse_record_with_implements() {
-        let content = "public record User(String name, int age) implements Serializable {}\n";
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        let rec = symbols.iter().find(|s| s.name == "User").unwrap();
-        assert_eq!(rec.kind, SymbolKind::Class);
-        assert!(
-            rec.parents
-                .iter()
-                .any(|(p, k)| p == "Serializable" && k == "implements")
-        );
-    }
-
-    #[test]
-    fn test_record_explicit_accessor_override() {
-        let content = r#"public record Point(int x, int y) {
-    public int x() {
-        return Math.abs(x);
-    }
-}
-"#;
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        // The explicit x() method should exist
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "x" && s.kind == SymbolKind::Function),
-            "Explicit x method should be indexed"
-        );
-        // The synthetic x() accessor should NOT exist (explicit override takes precedence)
-        assert!(
-            !symbols.iter().any(|s| s.name == "x()"),
-            "Synthetic x() accessor should be suppressed when explicit override exists"
-        );
-        // But y() accessor should still be emitted
-        assert!(
-            symbols
-                .iter()
-                .any(|s| s.name == "y()" && s.kind == SymbolKind::Function),
-            "Synthetic y() accessor should still be emitted"
-        );
-    }
-
-    #[test]
-    fn test_generic_class_inheritance() {
-        let content = "public class UserRepo extends CrudRepository<User, Long> implements UserRepository {\n}\n";
-        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
-        let cls = symbols.iter().find(|s| s.name == "UserRepo").unwrap();
-        assert!(
-            cls.parents
-                .iter()
-                .any(|(p, k)| p == "CrudRepository" && k == "extends")
-        );
-        assert!(
-            cls.parents
-                .iter()
-                .any(|(p, k)| p == "UserRepository" && k == "implements")
-        );
-    }
-}
+#[path = "java_tests.rs"]
+mod tests;
