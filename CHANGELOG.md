@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- **SQL injection in iOS commands** — `cmd_storyboard_usages` and `cmd_asset_usages` now use parameterized queries (`?1`/`?2`) instead of `format!()` string interpolation for all user-provided values (`class_name`, `module`, `asset`, `asset_type`)
+- **Scoped `find_implementations` drops results** — replaced client-side `limit * 5` fetch-and-filter with `find_implementations_scoped()` that pushes scope filtering into SQL via `path_condition()`, matching the pattern used by `find_references_scoped` and `search_symbols_scoped`
+- **Swift parent classification** — structs, enums, and actors now correctly mark all parents as "implements" (protocol conformances) instead of misclassifying the first parent as "extends" (superclass); extensions now capture protocol conformances added via the extension
+
+### Added
+- **Java records** — `record_declaration` indexed as `SymbolKind::Class`; record components extracted from `formal_parameters` as `SymbolKind::Property`; synthetic accessor methods emitted (e.g. `x()` for component `x`), suppressed when an explicit override exists; `is_inside_type_body` includes `record_body`
+- Composite covering index `idx_refs_name_file_line ON refs(name, file_id, line)` for faster scoped reference queries on large projects
+
+### Changed
+- **Java parser DRY refactoring** — replaced 4 near-identical parent extraction functions (`extract_class_parents`, `extract_interface_parents`, `extract_enum_parents`, `extract_record_parents`) with one data-driven `extract_parents(content, node, specs)` + 4 spec constants (`CLASS_PARENT_SPECS`, etc.)
+- Extracted Java tests to `src/parsers/treesitter/java_tests.rs` (344 lines), reducing `java.rs` from 861 to 487 lines
+- Updated CLAUDE.md: fixed `treesitter/mod.rs` → `treesitter.rs`, updated parser count to 15, added `java_tests.rs` to extracted test files list, documented data-driven parent extraction pattern
+
 ## [3.29.1] - 2026-04-12
 
 ### Fixed

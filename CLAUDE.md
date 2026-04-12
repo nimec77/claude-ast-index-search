@@ -51,13 +51,13 @@ cargo bench
   - **`src/db/queries.rs`** — All query types (`SearchResult`, `RefResult`, `SearchScope`, `DbStats`) and search/find functions. `SearchScope::empty()` is the constructor for no-scope queries.
   - **`src/db/tests.rs`** — Unit tests extracted from `db.rs` using `#[cfg(test)] mod tests;`.
 - **`src/parsers/`** — Two-tier parser system:
-  - `treesitter/` — Tree-sitter AST parsers (primary, one per language), each implements `LanguageParser` trait. Registered in `treesitter/mod.rs::get_treesitter_parser()`. Shared helper `pub(crate) fn find_capture` is defined once in `treesitter/mod.rs` and imported by all 14 parser files.
+  - `treesitter/` — Tree-sitter AST parsers (primary, one per language), each implements `LanguageParser` trait. Registered in `treesitter.rs::get_treesitter_parser()`. Shared helpers (`find_capture`, `CaptureIndexer`, `parse_tree`, `node_text`, `node_line`, `line_text`) are defined in `treesitter.rs` and imported by all 15 parser files.
   - `perl.rs`, `wsdl.rs` — Regex-based parsers for languages without tree-sitter support.
   - `typescript.rs` — Regex-based parser used for Vue/Svelte script block extraction (TypeScript itself uses tree-sitter).
   - `Vue`/`Svelte` files: script blocks extracted then parsed with the regex TypeScript parser.
   - `treesitter/queries/<lang>.scm` — Tree-sitter S-expression query patterns.
   - **`treesitter/dart_error_recovery.rs`** — Dart error recovery submodule (~240 lines): structs and functions for recovering class/extension-type declarations from tree-sitter ERROR nodes (`try_recover_from_error`, `extract_parents_from_error_text`, helper finders). Loaded as `#[path = "dart_error_recovery.rs"] mod error_recovery;` inside `dart.rs`.
-  - **`treesitter/dart_tests.rs`**, **`treesitter/csharp_tests.rs`**, **`treesitter/cpp_tests.rs`**, **`treesitter/typescript_tests.rs`** — Test modules extracted from the corresponding parser files using `#[cfg(test)] #[path = "<lang>_tests.rs"] mod tests;`. Each file starts with `use super::*;` and contains all `#[test]` functions. The same pattern is used for `db/tests.rs`.
+  - **`treesitter/dart_tests.rs`**, **`treesitter/csharp_tests.rs`**, **`treesitter/cpp_tests.rs`**, **`treesitter/typescript_tests.rs`**, **`treesitter/java_tests.rs`** — Test modules extracted from the corresponding parser files using `#[cfg(test)] #[path = "<lang>_tests.rs"] mod tests;`. Each file starts with `use super::*;` and contains all `#[test]` functions. The same pattern is used for `db/tests.rs`.
 - **`src/commands/`** — One file per command group (`grep.rs`, `management.rs`, `index.rs`, `modules.rs`, `files.rs`, `android.rs`, `ios.rs`, `perl.rs`, `analysis.rs`, `project_info.rs`, `watch.rs`). Grep-based commands use ripgrep internals (`grep-searcher`); index-based commands query SQLite directly. `management.rs` includes `pub fn cmd_install_claude_plugin()`.
 
 ### Project root detection (`find_project_root()`)
@@ -90,12 +90,13 @@ The plugin version in `plugin.json` must be bumped in sync with Cargo.toml on re
 3. Create `src/parsers/treesitter/<lang>.rs` implementing `LanguageParser`
 4. Register in `src/parsers/treesitter/mod.rs::get_treesitter_parser()`
 5. Add file extensions in `src/indexer.rs`
-6. Add tests inline in `<lang>.rs` (see smaller parsers as reference); if the test module exceeds ~400 lines, extract to `<lang>_tests.rs` using `#[cfg(test)] #[path = "<lang>_tests.rs"] mod tests;` (see `dart.rs`, `csharp.rs`, `cpp.rs`, `typescript.rs`)
+6. Add tests inline in `<lang>.rs` (see smaller parsers as reference); if the test module exceeds ~400 lines, extract to `<lang>_tests.rs` using `#[cfg(test)] #[path = "<lang>_tests.rs"] mod tests;` (see `dart.rs`, `csharp.rs`, `cpp.rs`, `typescript.rs`, `java.rs`)
+7. For inheritance extraction, prefer data-driven specs over per-type-declaration functions — see `java.rs` which uses `extract_parents(content, node, SPECS)` with const spec arrays (`CLASS_PARENT_SPECS`, etc.) instead of separate `extract_class_parents`/`extract_enum_parents`/... functions
 
 **Plugin side (do alongside the Rust changes):**
-7. Create `plugin/commands/initialize-<lang>.md` following the pattern of existing initialize commands; verify step should use a language-relevant search term
-8. Create `plugin/skills/ast-index/references/<lang>-commands.md` with the exhaustive command list for the new language
-9. Add the language to the supported-projects table in `plugin/skills/ast-index/SKILL.md`
+8. Create `plugin/commands/initialize-<lang>.md` following the pattern of existing initialize commands; verify step should use a language-relevant search term
+9. Create `plugin/skills/ast-index/references/<lang>-commands.md` with the exhaustive command list for the new language
+10. Add the language to the supported-projects table in `plugin/skills/ast-index/SKILL.md`
 
 ### `ParsedSymbol` and `SymbolKind`
 
