@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.29.1] - 2026-04-12
+
 ### Fixed
 - `get_db_path` no longer creates empty cache directories as a side effect of read-only probes (e.g. `stats`, `search`, `db-path` on unindexed projects)
 - `is_no_ignore_enabled` and `grep_project` now check `db_exists` before calling `open_db`, preventing orphan SQLite files in the cache
