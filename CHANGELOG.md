@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- `get_db_path` no longer creates empty cache directories as a side effect of read-only probes (e.g. `stats`, `search`, `db-path` on unindexed projects)
+- `is_no_ignore_enabled` and `grep_project` now check `db_exists` before calling `open_db`, preventing orphan SQLite files in the cache
+
+### Changed
+- Extracted `db` unit tests to `src/db/tests.rs`, reducing `db.rs` from 857 to 576 lines
+- Updated CLAUDE.md: fixed stale line counts, removed phantom `Trait`/`Macro` from `SymbolKind` docs, documented `db/tests.rs`
+
 ## [3.29.0] - 2026-03-28
 
 ### Changed
