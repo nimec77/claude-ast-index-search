@@ -13,6 +13,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use colored::Colorize;
+use rusqlite::types::ToSql;
 
 use super::common::CommandTimer;
 use regex::Regex;
@@ -26,34 +27,44 @@ pub fn cmd_storyboard_usages(root: &Path, class_name: &str, module: Option<&str>
 
     let conn = open_db_or_return!(root);
 
-    let query = if let Some(m) = module {
-        format!(
+    let class_pattern = format!("%{}%", class_name);
+
+    let (query, params): (String, Vec<Box<dyn ToSql>>) = if let Some(m) = module {
+        let module_pattern = format!("%{}%", m);
+        (
             r#"
             SELECT su.file_path, su.line, su.class_name, su.usage_type, su.storyboard_id
             FROM storyboard_usages su
             LEFT JOIN modules mod ON su.module_id = mod.id
-            WHERE su.class_name LIKE '%{}%'
-            AND (mod.name LIKE '%{}%' OR mod.path LIKE '%{}%')
+            WHERE su.class_name LIKE ?1
+            AND (mod.name LIKE ?2 OR mod.path LIKE ?3)
             ORDER BY su.file_path, su.line
-            "#,
-            class_name, m, m
+            "#
+            .to_string(),
+            vec![
+                Box::new(class_pattern),
+                Box::new(module_pattern.clone()),
+                Box::new(module_pattern),
+            ],
         )
     } else {
-        format!(
+        (
             r#"
             SELECT file_path, line, class_name, usage_type, storyboard_id
             FROM storyboard_usages
-            WHERE class_name LIKE '%{}%'
+            WHERE class_name LIKE ?1
             ORDER BY file_path, line
-            "#,
-            class_name
+            "#
+            .to_string(),
+            vec![Box::new(class_pattern)],
         )
     };
 
+    let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| p.as_ref()).collect();
     let mut stmt = conn.prepare(&query)?;
     #[allow(clippy::type_complexity)]
     let results: Vec<(String, i64, String, Option<String>, Option<String>)> = stmt
-        .query_map([], |row| {
+        .query_map(param_refs.as_slice(), |row| {
             Ok((
                 row.get(0)?,
                 row.get(1)?,
@@ -120,9 +131,16 @@ pub fn cmd_asset_usages(
         }
 
         let m = module.unwrap();
-        let type_filter = asset_type
-            .map(|t| format!("AND a.type = '{}'", t))
-            .unwrap_or_default();
+        let module_pattern = format!("%{}%", m);
+        let mut params: Vec<Box<dyn ToSql>> =
+            vec![Box::new(module_pattern.clone()), Box::new(module_pattern)];
+
+        let type_filter = if let Some(t) = asset_type {
+            params.push(Box::new(t.to_string()));
+            format!("AND a.type = ?{}", params.len())
+        } else {
+            String::new()
+        };
 
         let query = format!(
             r#"
@@ -130,18 +148,20 @@ pub fn cmd_asset_usages(
             FROM ios_assets a
             LEFT JOIN modules mod ON a.module_id = mod.id
             LEFT JOIN ios_asset_usages au ON a.id = au.asset_id
-            WHERE (mod.name LIKE '%{}%' OR mod.path LIKE '%{}%')
+            WHERE (mod.name LIKE ?1 OR mod.path LIKE ?2)
             AND au.id IS NULL
             {}
             ORDER BY a.type, a.name
             "#,
-            m, m, type_filter
+            type_filter
         );
 
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn.prepare(&query)?;
         let results: Vec<(String, String, String)> = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
-            .unwrap()
+            .query_map(param_refs.as_slice(), |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -161,18 +181,24 @@ pub fn cmd_asset_usages(
         }
     } else if asset.is_empty() {
         // List all assets
-        let type_filter = asset_type
-            .map(|t| format!("WHERE type = '{}'", t))
-            .unwrap_or_default();
+        let mut params: Vec<Box<dyn ToSql>> = Vec::new();
+        let type_filter = if let Some(t) = asset_type {
+            params.push(Box::new(t.to_string()));
+            "WHERE type = ?1".to_string()
+        } else {
+            String::new()
+        };
         let query = format!(
             "SELECT name, type, file_path FROM ios_assets {} ORDER BY type, name LIMIT 100",
             type_filter
         );
 
+        let param_refs: Vec<&dyn ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn.prepare(&query)?;
         let results: Vec<(String, String, String)> = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
-            .unwrap()
+            .query_map(param_refs.as_slice(), |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -182,23 +208,20 @@ pub fn cmd_asset_usages(
         }
     } else {
         // Find usages of specific asset
-        let query = format!(
+        let asset_pattern = format!("%{}%", asset);
+        let mut stmt = conn.prepare(
             r#"
             SELECT a.name, a.type, au.usage_file, au.usage_line
             FROM ios_assets a
             JOIN ios_asset_usages au ON a.id = au.asset_id
-            WHERE a.name LIKE '%{}%'
+            WHERE a.name LIKE ?1
             ORDER BY au.usage_file, au.usage_line
             "#,
-            asset
-        );
-
-        let mut stmt = conn.prepare(&query)?;
+        )?;
         let results: Vec<(String, String, String, i64)> = stmt
-            .query_map([], |row| {
+            .query_map(rusqlite::params![asset_pattern], |row| {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-            })
-            .unwrap()
+            })?
             .filter_map(|r| r.ok())
             .collect();
 

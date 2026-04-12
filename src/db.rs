@@ -262,6 +262,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_refs_name ON refs(name);
         CREATE INDEX IF NOT EXISTS idx_refs_file ON refs(file_id);
+        CREATE INDEX IF NOT EXISTS idx_refs_name_file_line ON refs(name, file_id, line);
 
         -- XML usages (classes used in XML layouts)
         CREATE TABLE IF NOT EXISTS xml_usages (

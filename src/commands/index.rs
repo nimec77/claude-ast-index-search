@@ -323,28 +323,7 @@ pub fn cmd_implementations(
     let _timer = CommandTimer::new();
 
     let conn = open_db_or_return!(root);
-    let impls = if scope.is_empty() {
-        db::find_implementations(&conn, parent, limit)?
-    } else {
-        // For scoped implementations, filter results post-query
-        let all = db::find_implementations(&conn, parent, limit * 5)?;
-        all.into_iter()
-            .filter(|s| {
-                if let Some(in_file) = scope.in_file
-                    && !s.path.contains(in_file)
-                {
-                    return false;
-                }
-                if let Some(module) = scope.module
-                    && !s.path.starts_with(module)
-                {
-                    return false;
-                }
-                true
-            })
-            .take(limit)
-            .collect()
-    };
+    let impls = db::find_implementations_scoped(&conn, parent, limit, scope)?;
 
     if format == "json" {
         println!("{}", serde_json::to_string_pretty(&impls)?);

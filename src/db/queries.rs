@@ -124,37 +124,52 @@ pub fn find_class_like(conn: &Connection, name: &str, limit: usize) -> Result<Ve
     find_class_like_scoped(conn, name, limit, &SearchScope::empty())
 }
 
-/// Find implementations (subclasses/implementors)
+/// Find implementations (subclasses/implementors).
+/// Thin wrapper around `find_implementations_scoped` with an empty scope.
 pub fn find_implementations(
     conn: &Connection,
     parent_name: &str,
     limit: usize,
 ) -> Result<Vec<SearchResult>> {
+    find_implementations_scoped(conn, parent_name, limit, &SearchScope::empty())
+}
+
+/// Find implementations with scope filtering (file/module/dir).
+pub fn find_implementations_scoped(
+    conn: &Connection,
+    parent_name: &str,
+    limit: usize,
+    scope: &SearchScope,
+) -> Result<Vec<SearchResult>> {
     // Match exact name or qualified suffix (%.Name) only.
     // Avoids broad contains match (%Name%) which causes false positives
     // (e.g., searching "Map" would match "HashMap", "TreeMap").
     let suffix_pattern = format!("%.{}", parent_name);
-    let mut stmt = conn.prepare(
+    let (scope_clause, scope_params) = scope.path_condition();
+
+    let sql = format!(
         r#"
         SELECT s.name, s.kind, s.line, s.signature, f.path
         FROM inheritance i
         JOIN symbols s ON i.child_id = s.id
         JOIN files f ON s.file_id = f.id
-        WHERE i.parent_name = ?1 OR i.parent_name LIKE ?2
+        WHERE (i.parent_name = ?1 OR i.parent_name LIKE ?2){}
         ORDER BY
             CASE
                 WHEN i.parent_name = ?1 THEN 0
                 ELSE 1
             END, s.name
-        LIMIT ?3
+        LIMIT ?{}
         "#,
-    )?;
+        scope_clause,
+        3 + scope_params.len()
+    );
 
+    let mut stmt = conn.prepare(&sql)?;
+    let all_params = collect_query_params(&[parent_name, &suffix_pattern], &scope_params, limit);
+    let param_refs = params_as_refs(&all_params);
     let results = stmt
-        .query_map(
-            params![parent_name, suffix_pattern, limit as i64],
-            SearchResult::from_row,
-        )?
+        .query_map(param_refs.as_slice(), SearchResult::from_row)?
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(results)

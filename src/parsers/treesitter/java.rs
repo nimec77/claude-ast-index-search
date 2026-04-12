@@ -1,6 +1,7 @@
 //! Tree-sitter based Java parser
 
 use anyhow::Result;
+use std::collections::HashSet;
 use std::sync::LazyLock;
 use tree_sitter::{Language, Query, QueryCursor, StreamingIterator};
 
@@ -85,11 +86,17 @@ impl LanguageParser for JavaParser {
         let idx_constructor_node = idx.get("constructor_node");
         let idx_field_name = idx.get("field_name");
         let idx_field_node = idx.get("field_node");
+        let idx_record_name = idx.get("record_name");
+        let idx_record_node = idx.get("record_node");
         let idx_annotation_name = idx.get("annotation_name");
         let idx_annotation_call_name = idx.get("annotation_call_name");
 
-        let mut emitted: std::collections::HashSet<(String, usize)> =
-            std::collections::HashSet::new();
+        let mut emitted: HashSet<(String, usize)> = HashSet::new();
+
+        // Track explicitly defined methods so we can skip synthetic record accessors
+        let mut explicit_methods: HashSet<String> = HashSet::new();
+        // Deferred record component accessors: (name, line, signature)
+        let mut pending_record_accessors: Vec<(String, usize, String)> = Vec::new();
 
         let mut matches = cursor.matches(query, tree.root_node(), content.as_bytes());
 
@@ -151,13 +158,56 @@ impl LanguageParser for JavaParser {
                 continue;
             }
 
-            // === Methods (only inside class/interface/enum body) ===
+            // === Records ===
+            if let Some(name_cap) = find_capture(m, idx_record_name) {
+                let name = node_text(content, &name_cap.node);
+                let line = node_line(&name_cap.node);
+                if emitted.insert((name.to_string(), line)) {
+                    let record_node = find_capture(m, idx_record_node).map(|n| n.node);
+                    let parents = record_node
+                        .as_ref()
+                        .map(|n| extract_record_parents(content, n))
+                        .unwrap_or_default();
+                    symbols.push(ParsedSymbol {
+                        name: name.to_string(),
+                        kind: SymbolKind::Class,
+                        line,
+                        signature: line_text(content, line).trim().to_string(),
+                        parents,
+                    });
+                    // Extract record components from formal_parameters
+                    if let Some(rn) = &record_node {
+                        for (comp_name, comp_type) in extract_record_components(content, rn) {
+                            let comp_line = line; // components share the record's line
+                            if emitted.insert((comp_name.clone(), comp_line)) {
+                                symbols.push(ParsedSymbol {
+                                    name: comp_name.clone(),
+                                    kind: SymbolKind::Property,
+                                    line: comp_line,
+                                    signature: format!("{} {}", comp_type, comp_name),
+                                    parents: vec![],
+                                });
+                                // Queue synthetic accessor
+                                pending_record_accessors.push((
+                                    comp_name.clone(),
+                                    comp_line,
+                                    format!("public {} {}()", comp_type, comp_name),
+                                ));
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // === Methods (only inside class/interface/enum/record body) ===
             if let Some(name_cap) = find_capture(m, idx_method_name) {
                 if let Some(node_cap) = find_capture(m, idx_method_node)
                     && is_inside_type_body(&node_cap.node)
                 {
                     let name = node_text(content, &name_cap.node);
                     let line = node_line(&name_cap.node);
+                    explicit_methods.insert(name.to_string());
                     if emitted.insert((name.to_string(), line)) {
                         symbols.push(ParsedSymbol {
                             name: name.to_string(),
@@ -248,17 +298,37 @@ impl LanguageParser for JavaParser {
             }
         }
 
+        // Emit synthetic record component accessors (skip if an explicit override exists)
+        for (name, line, signature) in pending_record_accessors {
+            if !explicit_methods.contains(&name) {
+                let key = (format!("{}()", name), line);
+                if emitted.insert(key) {
+                    symbols.push(ParsedSymbol {
+                        name: format!("{}()", name),
+                        kind: SymbolKind::Function,
+                        line,
+                        signature,
+                        parents: vec![],
+                    });
+                }
+            }
+        }
+
         Ok(symbols)
     }
 }
 
-/// Check if a node is inside a class_body, interface_body, or enum_body
+/// Check if a node is inside a class_body, interface_body, enum_body, or record_body
 fn is_inside_type_body(node: &tree_sitter::Node) -> bool {
     node.parent()
         .map(|p| {
             matches!(
                 p.kind(),
-                "class_body" | "interface_body" | "enum_body" | "enum_body_declarations"
+                "class_body"
+                    | "interface_body"
+                    | "enum_body"
+                    | "enum_body_declarations"
+                    | "record_body"
             )
         })
         .unwrap_or(false)
@@ -317,6 +387,66 @@ fn extract_enum_parents(content: &str, enum_node: &tree_sitter::Node) -> Vec<(St
     }
 
     parents
+}
+
+/// Extract parent types from a record_declaration (implements only — records can't extend)
+fn extract_record_parents(content: &str, record_node: &tree_sitter::Node) -> Vec<(String, String)> {
+    let mut parents = Vec::new();
+    let mut cursor = record_node.walk();
+
+    for child in record_node.children(&mut cursor) {
+        if child.kind() == "super_interfaces" {
+            extract_type_list(&child, content, "implements", &mut parents);
+        }
+    }
+
+    parents
+}
+
+/// Extract record components as (name, type_string) pairs from a record_declaration node
+fn extract_record_components(
+    content: &str,
+    record_node: &tree_sitter::Node,
+) -> Vec<(String, String)> {
+    let mut components = Vec::new();
+    let mut cursor = record_node.walk();
+    for child in record_node.children(&mut cursor) {
+        if child.kind() == "formal_parameters" {
+            let mut param_cursor = child.walk();
+            for param in child.children(&mut param_cursor) {
+                if param.kind() == "formal_parameter" {
+                    let mut name = String::new();
+                    let mut type_str = String::new();
+                    let mut inner = param.walk();
+                    for field in param.children(&mut inner) {
+                        match field.kind() {
+                            "identifier" => {
+                                name = node_text(content, &field).to_string();
+                            }
+                            "type_identifier"
+                            | "integral_type"
+                            | "floating_point_type"
+                            | "boolean_type"
+                            | "void_type"
+                            | "generic_type"
+                            | "scoped_type_identifier"
+                            | "array_type" => {
+                                type_str = node_text(content, &field).to_string();
+                            }
+                            _ => {}
+                        }
+                    }
+                    if !name.is_empty() {
+                        if type_str.is_empty() {
+                            type_str = "Object".to_string();
+                        }
+                        components.push((name, type_str));
+                    }
+                }
+            }
+        }
+    }
+    components
 }
 
 /// Extract a single type name from a superclass node
@@ -627,6 +757,88 @@ public class Foo {
             symbols
                 .iter()
                 .any(|s| s.name == "bar" && s.kind == SymbolKind::Function)
+        );
+    }
+
+    #[test]
+    fn test_parse_record() {
+        let content = "public record Point(int x, int y) {}\n";
+        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
+        // Record emits as Class
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "Point" && s.kind == SymbolKind::Class),
+            "Record should be indexed as Class"
+        );
+        // Components emitted as Property
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "x" && s.kind == SymbolKind::Property),
+            "Record component x should be Property"
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "y" && s.kind == SymbolKind::Property),
+            "Record component y should be Property"
+        );
+        // Synthetic accessors emitted as Function
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "x()" && s.kind == SymbolKind::Function),
+            "Synthetic accessor x() should be Function"
+        );
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "y()" && s.kind == SymbolKind::Function),
+            "Synthetic accessor y() should be Function"
+        );
+    }
+
+    #[test]
+    fn test_parse_record_with_implements() {
+        let content = "public record User(String name, int age) implements Serializable {}\n";
+        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
+        let rec = symbols.iter().find(|s| s.name == "User").unwrap();
+        assert_eq!(rec.kind, SymbolKind::Class);
+        assert!(
+            rec.parents
+                .iter()
+                .any(|(p, k)| p == "Serializable" && k == "implements")
+        );
+    }
+
+    #[test]
+    fn test_record_explicit_accessor_override() {
+        let content = r#"public record Point(int x, int y) {
+    public int x() {
+        return Math.abs(x);
+    }
+}
+"#;
+        let symbols = JAVA_PARSER.parse_symbols(content).unwrap();
+        // The explicit x() method should exist
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "x" && s.kind == SymbolKind::Function),
+            "Explicit x method should be indexed"
+        );
+        // The synthetic x() accessor should NOT exist (explicit override takes precedence)
+        assert!(
+            !symbols.iter().any(|s| s.name == "x()"),
+            "Synthetic x() accessor should be suppressed when explicit override exists"
+        );
+        // But y() accessor should still be emitted
+        assert!(
+            symbols
+                .iter()
+                .any(|s| s.name == "y()" && s.kind == SymbolKind::Function),
+            "Synthetic y() accessor should still be emitted"
         );
     }
 

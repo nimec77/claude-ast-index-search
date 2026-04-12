@@ -49,21 +49,19 @@ impl LanguageParser for SwiftParser {
                 let name = node_text(content, &name_cap.node);
                 let line = node_line(&name_cap.node);
 
-                // Determine kind from declaration_kind
-                let kind = if let Some(dk_cap) = find_capture(m, idx_decl_kind) {
-                    let dk = node_text(content, &dk_cap.node);
-                    match dk {
-                        "class" | "actor" => SymbolKind::Class,
-                        "struct" => SymbolKind::Class,
-                        _ => SymbolKind::Class,
-                    }
-                } else {
-                    SymbolKind::Class
+                // Determine kind and whether all parents are protocol conformances
+                let decl_kind_str =
+                    find_capture(m, idx_decl_kind).map(|dk_cap| node_text(content, &dk_cap.node));
+                let kind = match decl_kind_str {
+                    Some("class") | Some("actor") | Some("struct") => SymbolKind::Class,
+                    _ => SymbolKind::Class,
                 };
+                // Structs, enums, and actors can't have superclasses — all parents are protocol conformances
+                let all_implements = matches!(decl_kind_str, Some("struct") | Some("actor"));
 
                 // Walk the class_declaration node for inheritance_specifier children
                 let parents = if let Some(decl_node) = name_cap.node.parent() {
-                    collect_parents_from_node(&decl_node, content)
+                    collect_parents_from_node(&decl_node, content, all_implements)
                 } else {
                     vec![]
                 };
@@ -82,8 +80,9 @@ impl LanguageParser for SwiftParser {
             if let Some(name_cap) = find_capture(m, idx_enum_name) {
                 let name = node_text(content, &name_cap.node);
                 let line = node_line(&name_cap.node);
+                // Enums can't have superclasses — all parents are protocol conformances
                 let parents = if let Some(decl_node) = name_cap.node.parent() {
-                    collect_parents_from_node(&decl_node, content)
+                    collect_parents_from_node(&decl_node, content, true)
                 } else {
                     vec![]
                 };
@@ -106,12 +105,20 @@ impl LanguageParser for SwiftParser {
                 let extended_name = format!("{}+Extension", base_name);
                 let line = node_line(&ext_cap.node);
 
+                // Collect protocol conformances added by the extension
+                let mut parents = vec![(base_name.to_string(), "extends".to_string())];
+                if let Some(decl_node) = ext_cap.node.parent() {
+                    for (name, _) in collect_parents_from_node(&decl_node, content, true) {
+                        parents.push((name, "implements".to_string()));
+                    }
+                }
+
                 symbols.push(ParsedSymbol {
                     name: extended_name,
                     kind: SymbolKind::Object,
                     line,
                     signature: line_text(content, line).trim().to_string(),
-                    parents: vec![(base_name.to_string(), "extends".to_string())],
+                    parents,
                 });
                 continue;
             }
@@ -120,8 +127,9 @@ impl LanguageParser for SwiftParser {
             if let Some(name_cap) = find_capture(m, idx_protocol_name) {
                 let name = node_text(content, &name_cap.node);
                 let line = node_line(&name_cap.node);
+                // Protocols extend other protocols — first parent is "extends"
                 let parents = if let Some(decl_node) = name_cap.node.parent() {
-                    collect_parents_from_node(&decl_node, content)
+                    collect_parents_from_node(&decl_node, content, false)
                 } else {
                     vec![]
                 };
@@ -197,18 +205,23 @@ impl LanguageParser for SwiftParser {
 }
 
 /// Collect parent types by walking a declaration node's inheritance_specifier children.
-/// First parent is "extends", the rest are "implements".
-fn collect_parents_from_node(node: &tree_sitter::Node, content: &str) -> Vec<(String, String)> {
+/// When `all_implements` is true (structs, enums, actors), all parents are "implements".
+/// When false (classes, protocols), the first parent is "extends" and the rest are "implements".
+fn collect_parents_from_node(
+    node: &tree_sitter::Node,
+    content: &str,
+    all_implements: bool,
+) -> Vec<(String, String)> {
     let mut parents = Vec::new();
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.kind() == "inheritance_specifier" {
             // Find the type_identifier inside user_type
             if let Some(type_name) = find_type_identifier_in(&child, content) {
-                let kind = if parents.is_empty() {
-                    "extends"
-                } else {
+                let kind = if all_implements || !parents.is_empty() {
                     "implements"
+                } else {
+                    "extends"
                 };
                 parents.push((type_name, kind.to_string()));
             }
@@ -272,7 +285,14 @@ mod tests {
         let symbols = SWIFT_PARSER.parse_symbols(content).unwrap();
         let s = symbols.iter().find(|s| s.name == "User").unwrap();
         assert_eq!(s.kind, SymbolKind::Class); // struct treated as class
+        // Structs can't have superclasses — all parents are protocol conformances
+        assert!(
+            s.parents.iter().all(|(_, k)| k == "implements"),
+            "All struct parents should be 'implements', got: {:?}",
+            s.parents
+        );
         assert!(s.parents.iter().any(|(p, _)| p == "Codable"));
+        assert!(s.parents.iter().any(|(p, _)| p == "Equatable"));
     }
 
     #[test]
@@ -281,6 +301,12 @@ mod tests {
         let symbols = SWIFT_PARSER.parse_symbols(content).unwrap();
         let e = symbols.iter().find(|s| s.name == "Direction").unwrap();
         assert_eq!(e.kind, SymbolKind::Enum);
+        // Enums can't have superclasses — all parents are protocol conformances
+        assert!(
+            e.parents.iter().all(|(_, k)| k == "implements"),
+            "All enum parents should be 'implements', got: {:?}",
+            e.parents
+        );
     }
 
     #[test]
@@ -294,10 +320,17 @@ mod tests {
 
     #[test]
     fn test_parse_actor() {
-        let content = "actor DataStore {\n    func save() {}\n}\n";
+        let content = "actor DataStore: Sendable {\n    func save() {}\n}\n";
         let symbols = SWIFT_PARSER.parse_symbols(content).unwrap();
         let a = symbols.iter().find(|s| s.name == "DataStore").unwrap();
         assert_eq!(a.kind, SymbolKind::Class); // actor treated as class
+        // Actors can't have superclasses — all parents are protocol conformances
+        assert!(
+            a.parents.iter().all(|(_, k)| k == "implements"),
+            "All actor parents should be 'implements', got: {:?}",
+            a.parents
+        );
+        assert!(a.parents.iter().any(|(p, _)| p == "Sendable"));
     }
 
     #[test]
@@ -314,6 +347,14 @@ mod tests {
             ext.parents
                 .iter()
                 .any(|(p, k)| p == "String" && k == "extends")
+        );
+        // Extension conformances should be captured
+        assert!(
+            ext.parents
+                .iter()
+                .any(|(p, k)| p == "CustomProtocol" && k == "implements"),
+            "Extension conformances should be captured, got: {:?}",
+            ext.parents
         );
     }
 

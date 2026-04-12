@@ -23,6 +23,10 @@
   declarator: (variable_declarator
     name: (identifier) @field_name)) @field_node
 
+; Records (Java 16+)
+(record_declaration
+  name: (identifier) @record_name) @record_node
+
 ; Annotations (marker - no arguments, like @Override)
 (marker_annotation
   name: (identifier) @annotation_name)
