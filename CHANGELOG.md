@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [3.30.0] - 2026-04-12
+
 ### Fixed
 - **SQL injection in iOS commands** — `cmd_storyboard_usages` and `cmd_asset_usages` now use parameterized queries (`?1`/`?2`) instead of `format!()` string interpolation for all user-provided values (`class_name`, `module`, `asset`, `asset_type`)
 - **Scoped `find_implementations` drops results** — replaced client-side `limit * 5` fetch-and-filter with `find_implementations_scoped()` that pushes scope filtering into SQL via `path_condition()`, matching the pattern used by `find_references_scoped` and `search_symbols_scoped`
